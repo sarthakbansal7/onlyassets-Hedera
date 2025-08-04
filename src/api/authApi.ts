@@ -61,7 +61,7 @@ export interface ApiError {
 }
 
 // Base API configuration
-const API_BASE_URL = `${backendDomain}/api/auth`;
+const API_BASE_URL = `${backendDomain}/auth`;
 
 // Helper function to get auth headers
 const getAuthHeaders = (): HeadersInit => {
