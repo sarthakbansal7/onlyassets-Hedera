@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { 
   Eye, 
   EyeOff, 
@@ -13,18 +14,26 @@ import {
   Globe,
   CheckCircle,
   Star,
-  Home
+  Home,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { authApi, type RegisterData, type LoginData } from '@/api/authApi';
 
 const Login: React.FC = () => {
+  const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -40,14 +49,90 @@ const Login: React.FC = () => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+    // Clear errors when user starts typing
+    if (error) setError(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const validateForm = (): string | null => {
+    if (!formData.email || !formData.password) {
+      return 'Email and password are required';
+    }
+
+    if (!isLogin) {
+      if (!formData.firstName || !formData.lastName) {
+        return 'First name and last name are required';
+      }
+      if (formData.password !== formData.confirmPassword) {
+        return 'Passwords do not match';
+      }
+      if (formData.password.length < 6) {
+        return 'Password must be at least 6 characters long';
+      }
+      if (!formData.acceptTerms) {
+        return 'You must accept the terms and conditions';
+      }
+    }
+
+    return null;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle login/register logic here
-    console.log('Form submitted:', formData);
-    // For demo, redirect to dashboard
-    window.location.href = '/dashboard';
+    setError(null);
+    setSuccess(null);
+
+    // Validate form
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      if (isLogin) {
+        // Login
+        const loginData: LoginData = {
+          email: formData.email,
+          password: formData.password
+        };
+
+        const response = await authApi.login(loginData);
+        
+        if (response.success) {
+          setSuccess('Login successful! Redirecting...');
+          // Wait a moment to show success message, then redirect
+          setTimeout(() => {
+            navigate('/dashboard');
+          }, 1000);
+        }
+      } else {
+        // Register
+        const registerData: RegisterData = {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          password: formData.password,
+          confirmPassword: formData.confirmPassword
+        };
+
+        const response = await authApi.register(registerData);
+        
+        if (response.success) {
+          setSuccess('Registration successful! Redirecting...');
+          // Wait a moment to show success message, then redirect
+          setTimeout(() => {
+            navigate('/dashboard');
+          }, 1000);
+        }
+      }
+    } catch (error: any) {
+      console.error('Auth error:', error);
+      setError(error.message || 'An error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const features = [
@@ -87,7 +172,7 @@ const Login: React.FC = () => {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => window.location.href = '/'}
+          onClick={() => navigate('/')}
           className="bg-white/90 backdrop-blur-sm border-gray-200 text-gray-700 hover:bg-white hover:text-gray-900 hover:shadow-md transition-all duration-200"
         >
           <Home className="w-4 h-4 mr-2" />
@@ -173,6 +258,25 @@ const Login: React.FC = () => {
                 </button>
               </div>
               <form onSubmit={handleSubmit} className="space-y-0">
+                {/* Error/Success Messages */}
+                {error && (
+                  <Alert className="mb-4 border-red-200 bg-red-50">
+                    <AlertCircle className="h-4 w-4 text-red-600" />
+                    <AlertDescription className="text-red-800">
+                      {error}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                
+                {success && (
+                  <Alert className="mb-4 border-green-200 bg-green-50">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <AlertDescription className="text-green-800">
+                      {success}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 {/* Name Fields - Register Only */}
                 {!isLogin && (
                   <div className="grid grid-cols-2 gap-3 mb-4">
@@ -315,10 +419,20 @@ const Login: React.FC = () => {
                 {/* Submit Button */}
                 <Button 
                   type="submit" 
-                  className="w-full bg-gray-900 hover:bg-gray-800 text-white h-11 text-base font-medium transition-colors duration-200"
+                  disabled={isLoading}
+                  className="w-full bg-gray-900 hover:bg-gray-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-white h-11 text-base font-medium transition-colors duration-200"
                 >
-                  {isLogin ? 'Sign In' : 'Create Account'}
-                  <ArrowRight className="w-4 h-4 ml-2" />
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {isLogin ? 'Signing In...' : 'Creating Account...'}
+                    </>
+                  ) : (
+                    <>
+                      {isLogin ? 'Sign In' : 'Create Account'}
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </>
+                  )}
                 </Button>
 
                 {/* Social Login */}
@@ -359,6 +473,23 @@ const Login: React.FC = () => {
             <div className="inline-flex items-center px-4 py-2 bg-blue-50 rounded-lg text-sm text-blue-700">
               <Shield className="w-4 h-4 mr-2" />
               <span><strong>Demo:</strong> demo@assetdash.com / demo123</span>
+            </div>
+            <div className="mt-2">
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => {
+                  setFormData(prev => ({
+                    ...prev,
+                    email: 'demo@assetdash.com',
+                    password: 'demo123'
+                  }));
+                  setIsLogin(true);
+                }}
+                className="text-blue-600 hover:text-blue-800 text-xs"
+              >
+                Use Demo Credentials
+              </Button>
             </div>
           </div>
         </div>
