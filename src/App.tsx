@@ -10,6 +10,7 @@ import Issuer from "./pages/Issuer/issuer";
 import About from "./pages/about/about";
 import Dashboard from "./pages/dashboard/dashboard";
 import Login from "./pages/login/login";
+import ManagerDashboard from "./pages/managerdashboard/managerDashboard";
 import Header from "./components/Header";
 
 const App = () => (
@@ -27,6 +28,7 @@ const App = () => (
             <Route path="/issuer" element={<Issuer />} />
             <Route path="/about" element={<About />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/manager" element={<ManagerDashboard />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </div>
