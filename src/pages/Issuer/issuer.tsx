@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { LabelInputContainer } from '@/components/ui/form-utils';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { Copy, Home, TrendingUp, Building2, Plus, FileText, BarChart3, Shield, Users, Globe } from 'lucide-react';
+import { Copy, Home, TrendingUp, Building2, Plus, FileText, BarChart3, Shield, Users, Globe, Sun, Moon } from 'lucide-react';
 import { uploadFileToIPFS, uploadJSONToIPFS } from '@/utils/ipfs';
 
 const assetTypes = [
