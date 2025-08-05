@@ -256,48 +256,48 @@ const Issuer: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-950">
       {/* Professional Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-gray-900/50 backdrop-blur-xl border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             {/* Dashboard Title and Status */}
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-lg flex items-center justify-center">
                 <Building2 className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Issuer Dashboard</h1>
-                <p className="text-gray-600 mt-1">Manage your tokenized assets and marketplace listings</p>
+                <h1 className="text-2xl font-bold text-white">Issuer Dashboard</h1>
+                <p className="text-gray-400 mt-1">Manage your tokenized assets and marketplace listings</p>
               </div>
             </div>
             
             {/* Navigation and Status */}
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-2 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span className="text-blue-700 text-sm font-medium">Network: Mainnet</span>
+                <div className="flex items-center space-x-2 bg-blue-500/10 px-3 py-2 rounded-lg border border-blue-500/20">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                  <span className="text-blue-400 text-sm font-medium">Network: Mainnet</span>
                 </div>
-                <div className="flex items-center space-x-2 bg-green-50 px-3 py-2 rounded-lg border border-green-200">
-                  <Shield className="w-4 h-4 text-green-600" />
-                  <span className="text-green-700 text-sm font-medium">KYC Verified</span>
+                <div className="flex items-center space-x-2 bg-green-500/10 px-3 py-2 rounded-lg border border-green-500/20">
+                  <Shield className="w-4 h-4 text-green-400" />
+                  <span className="text-green-400 text-sm font-medium">KYC Verified</span>
                 </div>
               </div>
-              <Button asChild variant="ghost" className="text-gray-600 hover:text-gray-900 hover:bg-gray-100">
+              <Button asChild variant="ghost" className="text-gray-400 hover:text-white hover:bg-gray-800">
                 <Link to="/" className="flex items-center space-x-2">
                   <Home className="w-4 h-4" />
                   <span>Home</span>
                 </Link>
               </Button>
-              <Button asChild variant="ghost" className="text-gray-600 hover:text-gray-900 hover:bg-gray-100">
+              <Button asChild variant="ghost" className="text-gray-400 hover:text-white hover:bg-gray-800">
                 <Link to="/marketplace" className="flex items-center space-x-2">
                   <TrendingUp className="w-4 h-4" />
                   <span>Marketplace</span>
                 </Link>
               </Button>
-              <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                <Users className="w-4 h-4 text-gray-600" />
+              <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center">
+                <Users className="w-4 h-4 text-gray-300" />
               </div>
             </div>
           </div>
@@ -308,50 +308,50 @@ const Issuer: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="bg-gray-900/50 backdrop-blur-xl rounded-lg border border-gray-800 p-6">
             <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Building2 className="w-5 h-5 text-blue-600" />
+              <div className="p-2 bg-blue-500/20 rounded-lg">
+                <Building2 className="w-5 h-5 text-blue-400" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Assets Created</p>
-                <p className="text-2xl font-bold text-gray-900">0</p>
+                <p className="text-sm font-medium text-gray-400">Assets Created</p>
+                <p className="text-2xl font-bold text-white">0</p>
               </div>
             </div>
           </div>
           
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="bg-gray-900/50 backdrop-blur-xl rounded-lg border border-gray-800 p-6">
             <div className="flex items-center">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <TrendingUp className="w-5 h-5 text-green-600" />
+              <div className="p-2 bg-green-500/20 rounded-lg">
+                <TrendingUp className="w-5 h-5 text-green-400" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Assets Listed</p>
-                <p className="text-2xl font-bold text-gray-900">0</p>
+                <p className="text-sm font-medium text-gray-400">Assets Listed</p>
+                <p className="text-2xl font-bold text-white">0</p>
               </div>
             </div>
           </div>
           
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="bg-gray-900/50 backdrop-blur-xl rounded-lg border border-gray-800 p-6">
             <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <BarChart3 className="w-5 h-5 text-purple-600" />
+              <div className="p-2 bg-purple-500/20 rounded-lg">
+                <BarChart3 className="w-5 h-5 text-purple-400" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Total Volume</p>
-                <p className="text-2xl font-bold text-gray-900">$0</p>
+                <p className="text-sm font-medium text-gray-400">Total Volume</p>
+                <p className="text-2xl font-bold text-white">$0</p>
               </div>
             </div>
           </div>
           
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="bg-gray-900/50 backdrop-blur-xl rounded-lg border border-gray-800 p-6">
             <div className="flex items-center">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <Shield className="w-5 h-5 text-orange-600" />
+              <div className="p-2 bg-orange-500/20 rounded-lg">
+                <Shield className="w-5 h-5 text-orange-400" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Compliance Status</p>
-                <p className="text-lg font-bold text-green-600">Verified</p>
+                <p className="text-sm font-medium text-gray-400">Compliance Status</p>
+                <p className="text-lg font-bold text-green-400">Verified</p>
               </div>
             </div>
           </div>
@@ -360,15 +360,15 @@ const Issuer: React.FC = () => {
         {/* Main Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           {/* Asset Creation */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-            <div className="p-6 border-b border-gray-100">
+          <div className="bg-gray-900/50 backdrop-blur-xl rounded-xl border border-gray-800 shadow-xl">
+            <div className="p-6 border-b border-gray-800">
               <div className="flex items-center space-x-3">
-                <div className="p-2 bg-blue-50 rounded-lg">
-                  <Plus className="w-5 h-5 text-blue-600" />
+                <div className="p-2 bg-blue-500/20 rounded-lg">
+                  <Plus className="w-5 h-5 text-blue-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Tokenize New Asset</h3>
-                  <p className="text-gray-600 text-sm">Convert physical assets into digital tokens</p>
+                  <h3 className="text-lg font-semibold text-white">Tokenize New Asset</h3>
+                  <p className="text-gray-400 text-sm">Convert physical assets into digital tokens</p>
                 </div>
               </div>
             </div>
@@ -376,20 +376,20 @@ const Issuer: React.FC = () => {
               <div className="space-y-4">
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Asset Types Supported:</span>
-                    <span className="text-gray-900 font-medium">5</span>
+                    <span className="text-gray-400">Asset Types Supported:</span>
+                    <span className="text-white font-medium">5</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">IPFS Storage:</span>
-                    <span className="text-green-600 font-medium">Active</span>
+                    <span className="text-gray-400">IPFS Storage:</span>
+                    <span className="text-green-400 font-medium">Active</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Token Standard:</span>
-                    <span className="text-gray-900 font-medium">ERC-1155</span>
+                    <span className="text-gray-400">Token Standard:</span>
+                    <span className="text-white font-medium">ERC-1155</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Gas Estimation:</span>
-                    <span className="text-gray-900 font-medium">~0.015 ETH</span>
+                    <span className="text-gray-400">Gas Estimation:</span>
+                    <span className="text-white font-medium">~0.015 ETH</span>
                   </div>
                 </div>
                 <Button 
@@ -404,15 +404,15 @@ const Issuer: React.FC = () => {
           </div>
 
           {/* Market Listing */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-            <div className="p-6 border-b border-gray-100">
+          <div className="bg-gray-900/50 backdrop-blur-xl rounded-xl border border-gray-800 shadow-xl">
+            <div className="p-6 border-b border-gray-800">
               <div className="flex items-center space-x-3">
-                <div className="p-2 bg-green-50 rounded-lg">
-                  <TrendingUp className="w-5 h-5 text-green-600" />
+                <div className="p-2 bg-green-500/20 rounded-lg">
+                  <TrendingUp className="w-5 h-5 text-green-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">List on Marketplace</h3>
-                  <p className="text-gray-600 text-sm">Offer your tokens for public trading</p>
+                  <h3 className="text-lg font-semibold text-white">List on Marketplace</h3>
+                  <p className="text-gray-400 text-sm">Offer your tokens for public trading</p>
                 </div>
               </div>
             </div>
@@ -420,20 +420,20 @@ const Issuer: React.FC = () => {
               <div className="space-y-4">
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Listing Fee:</span>
-                    <span className="text-gray-900 font-medium">2.5%</span>
+                    <span className="text-gray-400">Listing Fee:</span>
+                    <span className="text-white font-medium">2.5%</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Settlement:</span>
-                    <span className="text-green-600 font-medium">Instant</span>
+                    <span className="text-gray-400">Settlement:</span>
+                    <span className="text-green-400 font-medium">Instant</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Min. Order Size:</span>
-                    <span className="text-gray-900 font-medium">1 Token</span>
+                    <span className="text-gray-400">Min. Order Size:</span>
+                    <span className="text-white font-medium">1 Token</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Market Hours:</span>
-                    <span className="text-green-600 font-medium">24/7</span>
+                    <span className="text-gray-400">Market Hours:</span>
+                    <span className="text-green-400 font-medium">24/7</span>
                   </div>
                 </div>
                 <Button 
@@ -449,43 +449,43 @@ const Issuer: React.FC = () => {
         </div>
 
         {/* Quick Actions Bar */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-8">
+        <div className="bg-gray-900/50 backdrop-blur-xl rounded-xl border border-gray-800 shadow-xl mb-8">
           <div className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+            <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <Button 
                 variant="outline" 
-                className="h-20 flex-col space-y-2 border-gray-200 hover:bg-gray-50"
+                className="h-20 flex-col space-y-2 border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-800 hover:text-white"
                 onClick={() => {/* Handle view portfolio */}}
               >
-                <BarChart3 className="w-5 h-5 text-gray-600" />
+                <BarChart3 className="w-5 h-5" />
                 <span className="text-sm font-medium">Portfolio</span>
               </Button>
               
               <Button 
                 variant="outline" 
-                className="h-20 flex-col space-y-2 border-gray-200 hover:bg-gray-50"
+                className="h-20 flex-col space-y-2 border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-800 hover:text-white"
                 onClick={() => {/* Handle transaction history */}}
               >
-                <FileText className="w-5 h-5 text-gray-600" />
+                <FileText className="w-5 h-5" />
                 <span className="text-sm font-medium">Transactions</span>
               </Button>
               
               <Button 
                 variant="outline" 
-                className="h-20 flex-col space-y-2 border-gray-200 hover:bg-gray-50"
+                className="h-20 flex-col space-y-2 border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-800 hover:text-white"
                 onClick={() => {/* Handle wallet settings */}}
               >
-                <Users className="w-5 h-5 text-gray-600" />
+                <Users className="w-5 h-5" />
                 <span className="text-sm font-medium">Wallet</span>
               </Button>
               
               <Button 
                 variant="outline" 
-                className="h-20 flex-col space-y-2 border-gray-200 hover:bg-gray-50"
+                className="h-20 flex-col space-y-2 border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-800 hover:text-white"
                 onClick={() => {/* Handle support */}}
               >
-                <Shield className="w-5 h-5 text-gray-600" />
+                <Shield className="w-5 h-5" />
                 <span className="text-sm font-medium">Support</span>
               </Button>
             </div>
@@ -494,11 +494,11 @@ const Issuer: React.FC = () => {
 
         {/* Portfolio Overview */}
         <div className="mt-8">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-            <div className="p-6 border-b border-gray-100">
+          <div className="bg-gray-900/50 backdrop-blur-xl rounded-xl border border-gray-800 shadow-xl">
+            <div className="p-6 border-b border-gray-800">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Your Asset Portfolio</h3>
-                <Button variant="outline" size="sm" className="text-gray-600 border-gray-300">
+                <h3 className="text-lg font-semibold text-white">Your Asset Portfolio</h3>
+                <Button variant="outline" size="sm" className="text-gray-300 border-gray-700 hover:bg-gray-800 hover:text-white">
                   <BarChart3 className="w-4 h-4 mr-2" />
                   View Analytics
                 </Button>
@@ -506,9 +506,9 @@ const Issuer: React.FC = () => {
             </div>
             <div className="p-6">
               <div className="text-center py-12">
-                <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                <h4 className="text-lg font-medium text-gray-900 mb-2">No Assets Yet</h4>
-                <p className="text-gray-500 mb-4">Start by tokenizing your first real-world asset</p>
+                <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h4 className="text-lg font-medium text-white mb-2">No Assets Yet</h4>
+                <p className="text-gray-400 mb-4">Start by tokenizing your first real-world asset</p>
                 <Button 
                   onClick={() => setShowNFTDialog(true)}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2"
@@ -529,10 +529,10 @@ const Issuer: React.FC = () => {
           }
           setShowNFTDialog(open);
         }}>
-          <DialogContent className="sm:max-w-lg rounded-xl border border-gray-200 bg-white shadow-xl p-6 md:p-8 max-h-[90vh] overflow-hidden">
+          <DialogContent className="sm:max-w-lg rounded-xl border border-gray-700 bg-gray-900 shadow-xl p-6 md:p-8 max-h-[90vh] overflow-hidden">
             <DialogHeader>
-              <DialogTitle className="text-xl font-bold text-gray-900 mb-2">Create Asset Token</DialogTitle>
-              <DialogDescription className="text-base text-gray-600 mb-4">
+              <DialogTitle className="text-xl font-bold text-white mb-2">Create Asset Token</DialogTitle>
+              <DialogDescription className="text-base text-gray-300 mb-4">
                 {mintStep === 1
                   ? "Enter the details for your real-world asset tokenization."
                   : "Configure the token parameters for deployment."}
@@ -542,15 +542,15 @@ const Issuer: React.FC = () => {
               {mintStep === 1 ? (
                 <form className="space-y-5">
                   <LabelInputContainer>
-                    <Label htmlFor="nftTitle">Asset Title</Label>
-                    <Input id="nftTitle" value={nftTitle} onChange={e => setNftTitle(e.target.value)} placeholder="e.g., Manhattan Commercial Property" type="text" className="border-gray-300" />
+                    <Label htmlFor="nftTitle" className="text-gray-200">Asset Title</Label>
+                    <Input id="nftTitle" value={nftTitle} onChange={e => setNftTitle(e.target.value)} placeholder="e.g., Manhattan Commercial Property" type="text" className="border-gray-600 bg-gray-800 text-white placeholder:text-gray-400" />
                   </LabelInputContainer>
                   <LabelInputContainer>
-                    <Label htmlFor="nftDescription">Description</Label>
-                    <Input id="nftDescription" value={nftDescription} onChange={e => setNftDescription(e.target.value)} placeholder="Detailed asset description" type="text" className="border-gray-300" />
+                    <Label htmlFor="nftDescription" className="text-gray-200">Description</Label>
+                    <Input id="nftDescription" value={nftDescription} onChange={e => setNftDescription(e.target.value)} placeholder="Detailed asset description" type="text" className="border-gray-600 bg-gray-800 text-white placeholder:text-gray-400" />
                   </LabelInputContainer>
                   <LabelInputContainer>
-                    <Label htmlFor="nftImage">Asset Documentation</Label>
+                    <Label htmlFor="nftImage" className="text-gray-200">Asset Documentation</Label>
                     <div className="flex flex-col gap-2">
                       <Input
                         id="nftImage"
@@ -558,7 +558,7 @@ const Issuer: React.FC = () => {
                         accept="image/*"
                         multiple
                         onChange={handleNftImageUpload}
-                        className="border-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        className="border-gray-600 bg-gray-800 text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
                       />
                       {nftImageFiles.length > 0 && (
                         <div className="grid grid-cols-3 gap-2 mt-2">
@@ -567,7 +567,7 @@ const Issuer: React.FC = () => {
                               <img
                                 src={URL.createObjectURL(file)}
                                 alt={`Preview ${index + 1}`}
-                                className="rounded-lg object-cover w-full h-full border border-gray-200"
+                                className="rounded-lg object-cover w-full h-full border border-gray-600"
                               />
                               <Button
                                 type="button"
@@ -585,16 +585,16 @@ const Issuer: React.FC = () => {
                     </div>
                   </LabelInputContainer>
                   <LabelInputContainer>
-                    <Label htmlFor="nftAssetType">Asset Category</Label>
-                    <select id="nftAssetType" value={nftAssetType} onChange={e => setNftAssetType(Number(e.target.value))} className="border border-gray-300 rounded-md px-3 py-2">
+                    <Label htmlFor="nftAssetType" className="text-gray-200">Asset Category</Label>
+                    <select id="nftAssetType" value={nftAssetType} onChange={e => setNftAssetType(Number(e.target.value))} className="border border-gray-600 bg-gray-800 text-white rounded-md px-3 py-2">
                       {assetTypes.map((type, idx) => (
                         <option key={type} value={idx}>{type}</option>
                       ))}
                     </select>
                   </LabelInputContainer>
                   <LabelInputContainer>
-                    <Label htmlFor="nftPriceToken">Base Currency</Label>
-                    <select id="nftPriceToken" value={nftPriceToken} onChange={e => setNftPriceToken(e.target.value)} className="border border-gray-300 rounded-md px-3 py-2">
+                    <Label htmlFor="nftPriceToken" className="text-gray-200">Base Currency</Label>
+                    <select id="nftPriceToken" value={nftPriceToken} onChange={e => setNftPriceToken(e.target.value)} className="border border-gray-600 bg-gray-800 text-white rounded-md px-3 py-2">
                       {priceTokens.map((token) => (
                         <option key={token} value={token}>{token}</option>
                       ))}
