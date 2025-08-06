@@ -57,6 +57,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import * as authApi from '@/api/authApi';
 
 // Types for Admin Management
 interface User {
@@ -106,9 +107,12 @@ const Admin: React.FC = () => {
   
   // Form states
   const [userForm, setUserForm] = useState({
-    address: '',
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
+    password: '',
+    confirmPassword: '',
+    walletAddress: '',
     role: 'issuer' as 'issuer' | 'manager',
     metadataURI: ''
   });
@@ -194,21 +198,50 @@ const Admin: React.FC = () => {
   };
 
   const handleAddUser = async () => {
-    if (!userForm.address || !userForm.name || !userForm.email) {
+    if (!userForm.firstName || !userForm.lastName || !userForm.email || !userForm.password || !userForm.walletAddress) {
       toast.error('Please fill all required fields');
+      return;
+    }
+
+    if (userForm.password !== userForm.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    if (userForm.password.length < 6) {
+      toast.error('Password must be at least 6 characters long');
+      return;
+    }
+
+    // Validate wallet address format
+    const walletRegex = /^0x[a-fA-F0-9]{40}$/;
+    if (!walletRegex.test(userForm.walletAddress)) {
+      toast.error('Invalid wallet address format');
       return;
     }
 
     setIsLoading(true);
     
     try {
-      // Demo submission - in production, this would call the Admin contract
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // In production, this would call the admin create user API
+      const userData = {
+        firstName: userForm.firstName,
+        lastName: userForm.lastName,
+        email: userForm.email,
+        password: userForm.password,
+        confirmPassword: userForm.confirmPassword,
+        walletAddress: userForm.walletAddress,
+        role: userForm.role,
+      };
+
+      // Demo submission - replace with actual API call
+      await authApi.createUser(userData);
+      // await new Promise(resolve => setTimeout(resolve, 2000));
       
       const newUser: User = {
         id: Date.now().toString(),
-        address: userForm.address,
-        name: userForm.name,
+        address: userForm.walletAddress,
+        name: `${userForm.firstName} ${userForm.lastName}`,
         email: userForm.email,
         role: userForm.role,
         status: 'active',
@@ -229,9 +262,12 @@ const Admin: React.FC = () => {
       
       setShowAddUserDialog(false);
       setUserForm({
-        address: '',
-        name: '',
+        firstName: '',
+        lastName: '',
         email: '',
+        password: '',
+        confirmPassword: '',
+        walletAddress: '',
         role: 'issuer',
         metadataURI: ''
       });
@@ -805,11 +841,11 @@ const Admin: React.FC = () => {
               Add {userForm.role.charAt(0).toUpperCase() + userForm.role.slice(1)}
             </DialogTitle>
             <DialogDescription className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-              Grant platform access to a new {userForm.role} with appropriate permissions.
+              Create a new {userForm.role} account with platform access and appropriate permissions.
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 max-h-96 overflow-y-auto">
             <div className="space-y-2">
               <Label htmlFor="role" className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>User Role</Label>
               <Select 
@@ -828,26 +864,27 @@ const Admin: React.FC = () => {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="address" className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>Wallet Address</Label>
-              <Input
-                id="address"
-                placeholder="0x..."
-                value={userForm.address}
-                onChange={(e) => setUserForm(prev => ({ ...prev, address: e.target.value }))}
-                className={`${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder:text-slate-400' : 'bg-white border-slate-300'} font-mono text-sm`}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="name" className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>Display Name</Label>
-              <Input
-                id="name"
-                placeholder="Organization or individual name"
-                value={userForm.name}
-                onChange={(e) => setUserForm(prev => ({ ...prev, name: e.target.value }))}
-                className={`${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder:text-slate-400' : 'bg-white border-slate-300'}`}
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="firstName" className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>First Name</Label>
+                <Input
+                  id="firstName"
+                  placeholder="John"
+                  value={userForm.firstName}
+                  onChange={(e) => setUserForm(prev => ({ ...prev, firstName: e.target.value }))}
+                  className={`${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder:text-slate-400' : 'bg-white border-slate-300'}`}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lastName" className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>Last Name</Label>
+                <Input
+                  id="lastName"
+                  placeholder="Doe"
+                  value={userForm.lastName}
+                  onChange={(e) => setUserForm(prev => ({ ...prev, lastName: e.target.value }))}
+                  className={`${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder:text-slate-400' : 'bg-white border-slate-300'}`}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -855,9 +892,44 @@ const Admin: React.FC = () => {
               <Input
                 id="email"
                 type="email"
-                placeholder="contact@organization.com"
+                placeholder="john.doe@company.com"
                 value={userForm.email}
                 onChange={(e) => setUserForm(prev => ({ ...prev, email: e.target.value }))}
+                className={`${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder:text-slate-400' : 'bg-white border-slate-300'}`}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="walletAddress" className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>Wallet Address</Label>
+              <Input
+                id="walletAddress"
+                placeholder="0x742d35Cc..."
+                value={userForm.walletAddress}
+                onChange={(e) => setUserForm(prev => ({ ...prev, walletAddress: e.target.value }))}
+                className={`${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder:text-slate-400' : 'bg-white border-slate-300'} font-mono text-sm`}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password" className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="Enter secure password"
+                value={userForm.password}
+                onChange={(e) => setUserForm(prev => ({ ...prev, password: e.target.value }))}
+                className={`${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder:text-slate-400' : 'bg-white border-slate-300'}`}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword" className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="Confirm password"
+                value={userForm.confirmPassword}
+                onChange={(e) => setUserForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
                 className={`${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder:text-slate-400' : 'bg-white border-slate-300'}`}
               />
             </div>
@@ -866,7 +938,7 @@ const Admin: React.FC = () => {
               <Label htmlFor="metadata" className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>Metadata URI <span className="text-xs text-slate-500">(Optional)</span></Label>
               <Input
                 id="metadata"
-                placeholder="ipfs://..."
+                placeholder="ipfs://QmExample..."
                 value={userForm.metadataURI}
                 onChange={(e) => setUserForm(prev => ({ ...prev, metadataURI: e.target.value }))}
                 className={`${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder:text-slate-400' : 'bg-white border-slate-300'} font-mono text-sm`}
@@ -882,10 +954,10 @@ const Admin: React.FC = () => {
               {isLoading ? (
                 <>
                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Adding...
+                  Creating Account...
                 </>
               ) : (
-                `Add ${userForm.role.charAt(0).toUpperCase() + userForm.role.slice(1)}`
+                `Create ${userForm.role.charAt(0).toUpperCase() + userForm.role.slice(1)} Account`
               )}
             </Button>
           </DialogFooter>
