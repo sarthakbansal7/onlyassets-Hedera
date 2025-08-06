@@ -7,11 +7,15 @@ export interface RegisterData {
   email: string;
   password: string;
   confirmPassword: string;
+  walletAddress: string;
+  role?: 'admin' | 'issuer' | 'manager' | 'user';
 }
 
 export interface LoginData {
-  email: string;
-  password: string;
+  email?: string;
+  password?: string;
+  walletAddress?: string;
+  preferredRole?: 'admin' | 'issuer' | 'manager' | 'user';
 }
 
 export interface User {
@@ -19,7 +23,9 @@ export interface User {
   firstName: string;
   lastName: string;
   email: string;
-  role: string;
+  roles: ('admin' | 'issuer' | 'manager' | 'user')[];
+  primaryRole: 'admin' | 'issuer' | 'manager' | 'user';
+  walletAddress: string;
   isVerified: boolean;
   kycStatus: string;
   createdAt: string;
@@ -51,6 +57,35 @@ export interface AuthResponse {
   data: {
     user: User;
     token: string;
+    currentRole: 'admin' | 'issuer' | 'manager' | 'user';
+    availableRoles: ('admin' | 'issuer' | 'manager' | 'user')[];
+    dashboardRoute: string;
+    hasMultipleRoles?: boolean;
+  };
+}
+
+export interface WalletVerificationResponse {
+  success: boolean;
+  data: {
+    walletExists: boolean;
+    availableRoles: ('admin' | 'issuer' | 'manager' | 'user')[];
+    userInfo?: {
+      firstName: string;
+      lastName: string;
+      email: string;
+    };
+  };
+}
+
+export interface RoleSwitchResponse {
+  success: boolean;
+  message: string;
+  data: {
+    user: User;
+    token: string;
+    currentRole: 'admin' | 'issuer' | 'manager' | 'user';
+    availableRoles: ('admin' | 'issuer' | 'manager' | 'user')[];
+    dashboardRoute: string;
   };
 }
 
@@ -100,6 +135,8 @@ export const authApi = {
       if (result.success && result.data.token) {
         localStorage.setItem('authToken', result.data.token);
         localStorage.setItem('user', JSON.stringify(result.data.user));
+        localStorage.setItem('currentRole', result.data.currentRole);
+        localStorage.setItem('availableRoles', JSON.stringify(result.data.availableRoles));
       }
       
       return result;
@@ -124,6 +161,8 @@ export const authApi = {
       if (result.success && result.data.token) {
         localStorage.setItem('authToken', result.data.token);
         localStorage.setItem('user', JSON.stringify(result.data.user));
+        localStorage.setItem('currentRole', result.data.currentRole);
+        localStorage.setItem('availableRoles', JSON.stringify(result.data.availableRoles));
       }
       
       return result;
@@ -171,7 +210,61 @@ export const authApi = {
     }
   },
 
-  // Logout user
+  // Verify wallet address
+  verifyWallet: async (walletAddress: string): Promise<WalletVerificationResponse> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/verify-wallet`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ walletAddress }),
+      });
+
+      return await handleResponse<WalletVerificationResponse>(response);
+    } catch (error) {
+      console.error('Verify wallet error:', error);
+      throw error;
+    }
+  },
+
+  // Switch user role
+  switchRole: async (newRole: 'admin' | 'issuer' | 'manager' | 'user'): Promise<RoleSwitchResponse> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/switch-role`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ newRole }),
+      });
+
+      const result = await handleResponse<RoleSwitchResponse>(response);
+      
+      // Update stored token and user data
+      if (result.success && result.data.token) {
+        localStorage.setItem('authToken', result.data.token);
+        localStorage.setItem('user', JSON.stringify(result.data.user));
+        localStorage.setItem('currentRole', result.data.currentRole);
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Switch role error:', error);
+      throw error;
+    }
+  },
+
+  // Get user roles
+  getUserRoles: async (): Promise<{ success: boolean; data: { availableRoles: any[]; currentRole: string; hasMultipleRoles: boolean } }> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/roles`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+      });
+
+      return await handleResponse(response);
+    } catch (error) {
+      console.error('Get user roles error:', error);
+      throw error;
+    }
+  },
   logout: async (): Promise<{ success: boolean; message: string }> => {
     try {
       const response = await fetch(`${API_BASE_URL}/logout`, {
@@ -184,6 +277,8 @@ export const authApi = {
       // Clear local storage
       localStorage.removeItem('authToken');
       localStorage.removeItem('user');
+      localStorage.removeItem('currentRole');
+      localStorage.removeItem('availableRoles');
       
       return result;
     } catch (error) {
@@ -191,6 +286,8 @@ export const authApi = {
       // Even if API call fails, clear local storage
       localStorage.removeItem('authToken');
       localStorage.removeItem('user');
+      localStorage.removeItem('currentRole');
+      localStorage.removeItem('availableRoles');
       throw error;
     }
   },
@@ -222,6 +319,40 @@ export const authApi = {
   clearAuthData: (): void => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('user');
+    localStorage.removeItem('currentRole');
+    localStorage.removeItem('availableRoles');
+  },
+
+  // Get current role
+  getCurrentRole: (): string | null => {
+    return localStorage.getItem('currentRole');
+  },
+
+  // Get available roles
+  getAvailableRoles: (): string[] => {
+    try {
+      const rolesStr = localStorage.getItem('availableRoles');
+      return rolesStr ? JSON.parse(rolesStr) : [];
+    } catch (error) {
+      console.error('Error parsing available roles:', error);
+      return [];
+    }
+  },
+
+  // Admin create user (issuer/manager)
+  createUser: async (userData: RegisterData): Promise<AuthResponse> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/create-user`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(userData),
+      });
+
+      return await handleResponse<AuthResponse>(response);
+    } catch (error) {
+      console.error('Create user error:', error);
+      throw error;
+    }
   },
 
   // Health check
@@ -249,10 +380,16 @@ export const {
   getProfile,
   updateProfile,
   logout,
+  verifyWallet,
+  switchRole,
+  getUserRoles,
+  createUser,
   isAuthenticated,
   getCurrentUser,
   getToken,
   clearAuthData,
+  getCurrentRole,
+  getAvailableRoles,
   healthCheck
 } = authApi;
 
