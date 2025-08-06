@@ -23,6 +23,7 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  AlertTriangle,
   BarChart3,
   TrendingUp,
   Clock,
@@ -37,7 +38,11 @@ import {
   Unlock,
   Database,
   Server,
-  Zap
+  Zap,
+  FileText,
+  Shield as ShieldCheck,
+  CreditCard,
+  Briefcase
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -463,35 +468,27 @@ const Admin: React.FC = () => {
                       </Button>
                       
                       <Button 
-                        onClick={handleToggleMarketplace}
-                        disabled={isLoading}
                         variant="outline"
-                        className={`h-20 flex-col space-y-2 ${
-                          marketplacePaused 
-                            ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950' 
-                            : 'border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950'
-                        }`}
+                        className={`h-20 flex-col space-y-2 ${isDarkMode ? 'border-slate-700 bg-slate-800/30 text-slate-300 hover:bg-slate-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
                       >
-                        {marketplacePaused ? <Power className="w-5 h-5" /> : <PowerOff className="w-5 h-5" />}
-                        <span className="text-sm font-medium">
-                          {marketplacePaused ? 'Resume Trading' : 'Pause Trading'}
-                        </span>
+                        <FileText className="w-5 h-5" />
+                        <span className="text-sm font-medium">Audit Logs</span>
                       </Button>
                       
                       <Button 
                         variant="outline" 
                         className={`h-20 flex-col space-y-2 ${isDarkMode ? 'border-slate-700 bg-slate-800/30 text-slate-300 hover:bg-slate-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
                       >
-                        <BarChart3 className="w-5 h-5" />
-                        <span className="text-sm font-medium">Analytics</span>
+                        <CreditCard className="w-5 h-5" />
+                        <span className="text-sm font-medium">Fee Management</span>
                       </Button>
                       
                       <Button 
                         variant="outline" 
                         className={`h-20 flex-col space-y-2 ${isDarkMode ? 'border-slate-700 bg-slate-800/30 text-slate-300 hover:bg-slate-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
                       >
-                        <Download className="w-5 h-5" />
-                        <span className="text-sm font-medium">Export Data</span>
+                        <Briefcase className="w-5 h-5" />
+                        <span className="text-sm font-medium">Asset Registry</span>
                       </Button>
                     </div>
                   </CardContent>
@@ -955,21 +952,47 @@ const Admin: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Remove User Dialog */}
+      {/* Professional Remove User Confirmation Dialog */}
       <Dialog open={showRemoveUserDialog} onOpenChange={setShowRemoveUserDialog}>
-        <DialogContent className={`sm:max-w-md ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`}>
+        <DialogContent className={`sm:max-w-md ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} shadow-xl`}>
           {selectedUser && (
             <>
-              <DialogHeader>
-                <DialogTitle className={`${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                  Remove {selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1)}
-                </DialogTitle>
-                <DialogDescription className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                  Are you sure you want to remove {selectedUser.name}? This action cannot be undone.
-                </DialogDescription>
+              <DialogHeader className="space-y-3">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 rounded-full bg-red-100 dark:bg-red-900/20">
+                    <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div>
+                    <DialogTitle className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                      Confirm Removal
+                    </DialogTitle>
+                    <DialogDescription className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                      This action will revoke all platform permissions
+                    </DialogDescription>
+                  </div>
+                </div>
               </DialogHeader>
+              
+              <div className="py-4">
+                <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-slate-700/50' : 'bg-slate-50'} border ${isDarkMode ? 'border-slate-600' : 'border-slate-200'}`}>
+                  <p className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                    You are about to remove <span className="font-medium">{selectedUser.name}</span> from the platform.
+                  </p>
+                  <p className={`text-xs mt-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    Role: <span className="capitalize font-medium">{selectedUser.role}</span>
+                  </p>
+                  <p className={`text-xs mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    Address: <span className="font-mono">{selectedUser.address}</span>
+                  </p>
+                  <div className={`mt-3 p-3 rounded ${isDarkMode ? 'bg-red-900/20 border border-red-800/30' : 'bg-red-50 border border-red-200'}`}>
+                    <p className={`text-xs font-medium ${isDarkMode ? 'text-red-300' : 'text-red-700'}`}>
+                      ⚠️ This action cannot be undone. All associated permissions will be permanently revoked.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
-              <DialogFooter>
+              <DialogFooter className="space-x-2">
                 <Button variant="outline" onClick={() => setShowRemoveUserDialog(false)}>
                   Cancel
                 </Button>
@@ -977,6 +1000,7 @@ const Admin: React.FC = () => {
                   variant="destructive" 
                   onClick={handleRemoveUser} 
                   disabled={isLoading}
+                  className="bg-red-600 hover:bg-red-700"
                 >
                   {isLoading ? (
                     <>
@@ -985,8 +1009,8 @@ const Admin: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Remove
+                      <UserMinus className="w-4 h-4 mr-2" />
+                      Remove User
                     </>
                   )}
                 </Button>
