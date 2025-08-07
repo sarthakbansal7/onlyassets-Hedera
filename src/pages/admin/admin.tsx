@@ -59,7 +59,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import * as authApi from '@/api/authApi';
 import { useWallet } from '@/context/WalletContext';
-import { getAllIssuers, getAllManagers, addIssuer, addManager } from '@/services/contractService';
+import { getAllIssuers, getAllManagers, addIssuer, addManager, removeIssuer, removeManager } from '@/services/contractService';
 import { uploadJSONToIPFS, fetchIPFSContent } from '@/utils/ipfs';
 
 // Types for Admin Management
@@ -170,8 +170,8 @@ const Admin: React.FC = () => {
         let userData = {
           id: address,
           address: address,
-          name: address.slice(0, 8) + '...' + address.slice(-6),
-          email: 'issuer@blockchain.local',
+          name: 'Loading...',
+          email: 'Loading...',
           role: 'issuer' as const,
           status: 'active' as const,
           metadataURI: metadataURI,
@@ -184,14 +184,25 @@ const Admin: React.FC = () => {
         // Try to fetch metadata from IPFS
         try {
           if (metadataURI) {
+            console.log(`Fetching metadata for issuer ${address}:`, metadataURI);
             const metadata = await fetchIPFSContent(metadataURI);
-            if (metadata) {
-              userData.name = metadata.name || userData.name;
-              userData.email = metadata.email || userData.email;
+            if (metadata && metadata.name && metadata.email) {
+              userData.name = metadata.name;
+              userData.email = metadata.email;
+              console.log(`✅ Metadata loaded for issuer ${address}:`, metadata.name, metadata.email);
+            } else {
+              console.log(`⚠️ Incomplete metadata for issuer ${address}`);
+              userData.name = `Issuer ${address.slice(0, 6)}...${address.slice(-4)}`;
+              userData.email = `issuer-${address.slice(0, 8)}@platform.local`;
             }
+          } else {
+            userData.name = `Issuer ${address.slice(0, 6)}...${address.slice(-4)}`;
+            userData.email = `issuer-${address.slice(0, 8)}@platform.local`;
           }
         } catch (error) {
           console.error('Error fetching metadata for issuer:', address, error);
+          userData.name = `Issuer ${address.slice(0, 6)}...${address.slice(-4)}`;
+          userData.email = `issuer-${address.slice(0, 8)}@platform.local`;
         }
         
         issuerUsers.push(userData);
@@ -203,8 +214,8 @@ const Admin: React.FC = () => {
         let userData = {
           id: address,
           address: address,
-          name: address.slice(0, 8) + '...' + address.slice(-6),
-          email: 'manager@blockchain.local',
+          name: 'Loading...',
+          email: 'Loading...',
           role: 'manager' as const,
           status: 'active' as const,
           metadataURI: metadataURI,
@@ -217,14 +228,25 @@ const Admin: React.FC = () => {
         // Try to fetch metadata from IPFS
         try {
           if (metadataURI) {
+            console.log(`Fetching metadata for manager ${address}:`, metadataURI);
             const metadata = await fetchIPFSContent(metadataURI);
-            if (metadata) {
-              userData.name = metadata.name || userData.name;
-              userData.email = metadata.email || userData.email;
+            if (metadata && metadata.name && metadata.email) {
+              userData.name = metadata.name;
+              userData.email = metadata.email;
+              console.log(`✅ Metadata loaded for manager ${address}:`, metadata.name, metadata.email);
+            } else {
+              console.log(`⚠️ Incomplete metadata for manager ${address}`);
+              userData.name = `Manager ${address.slice(0, 6)}...${address.slice(-4)}`;
+              userData.email = `manager-${address.slice(0, 8)}@platform.local`;
             }
+          } else {
+            userData.name = `Manager ${address.slice(0, 6)}...${address.slice(-4)}`;
+            userData.email = `manager-${address.slice(0, 8)}@platform.local`;
           }
         } catch (error) {
           console.error('Error fetching metadata for manager:', address, error);
+          userData.name = `Manager ${address.slice(0, 6)}...${address.slice(-4)}`;
+          userData.email = `manager-${address.slice(0, 8)}@platform.local`;
         }
         
         managerUsers.push(userData);
@@ -377,26 +399,43 @@ const Admin: React.FC = () => {
   const handleRemoveUser = async () => {
     if (!selectedUser) return;
 
+    // Check wallet connection
+    if (!isConnected || !signer) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
     setIsLoading(true);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
+      // Remove from contract first
       if (selectedUser.role === 'issuer') {
-        setIssuers(prev => prev.filter(issuer => issuer.id !== selectedUser.id));
-        setSystemMetrics(prev => ({ ...prev, totalIssuers: prev.totalIssuers - 1 }));
+        toast('Removing issuer from contract...');
+        await removeIssuer(selectedUser.address, signer);
+        toast.success('Issuer removed from contract successfully!');
       } else {
-        setManagers(prev => prev.filter(manager => manager.id !== selectedUser.id));
-        setSystemMetrics(prev => ({ ...prev, totalManagers: prev.totalManagers - 1 }));
+        toast('Removing manager from contract...');
+        await removeManager(selectedUser.address, signer);
+        toast.success('Manager removed from contract successfully!');
       }
+
+      // Refresh contract data to reflect the removal
+      await loadContractData();
       
       setShowRemoveUserDialog(false);
       setSelectedUser(null);
       
-      toast.success(`${selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1)} removed successfully!`);
+      toast.success(`${selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1)} removed successfully from blockchain!`);
       
-    } catch (error) {
-      toast.error('Failed to remove user');
+    } catch (error: any) {
+      console.error('Error removing user:', error);
+      if (error.message.includes('User denied')) {
+        toast.error('Transaction was cancelled by user');
+      } else if (error.message.includes('not found')) {
+        toast.error('User not found in contract');
+      } else {
+        toast.error(`Failed to remove user: ${error.message}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -552,7 +591,7 @@ const Admin: React.FC = () => {
                           systemMetrics.totalIssuers
                         )}
                       </p>
-                      <p className="text-xs text-emerald-600 dark:text-emerald-400">From blockchain data</p>
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400">Live contract data</p>
                     </div>
                     <div className="p-3 bg-slate-100 dark:bg-slate-700 rounded-lg">
                       <Building2 className="w-5 h-5 text-slate-700 dark:text-slate-300" />
@@ -576,7 +615,7 @@ const Admin: React.FC = () => {
                           systemMetrics.totalManagers
                         )}
                       </p>
-                      <p className="text-xs text-emerald-600 dark:text-emerald-400">From blockchain data</p>
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400">Live contract data</p>
                     </div>
                     <div className="p-3 bg-slate-100 dark:bg-slate-700 rounded-lg">
                       <Users className="w-5 h-5 text-slate-700 dark:text-slate-300" />
@@ -1081,17 +1120,6 @@ const Admin: React.FC = () => {
                 className={`${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder:text-slate-400' : 'bg-white border-slate-300'}`}
               />
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="metadata" className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>Metadata URI <span className="text-xs text-slate-500">(Optional)</span></Label>
-              <Input
-                id="metadata"
-                placeholder="ipfs://QmExample..."
-                value={userForm.metadataURI}
-                onChange={(e) => setUserForm(prev => ({ ...prev, metadataURI: e.target.value }))}
-                className={`${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder:text-slate-400' : 'bg-white border-slate-300'} font-mono text-sm`}
-              />
-            </div>
           </div>
 
           <DialogFooter className="space-x-2 pt-4">
@@ -1187,7 +1215,7 @@ const Admin: React.FC = () => {
                       Confirm Removal
                     </DialogTitle>
                     <DialogDescription className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                      This action will revoke all platform permissions
+                      Are you sure you want to remove this user from the blockchain? This action cannot be undone.
                     </DialogDescription>
                   </div>
                 </div>
