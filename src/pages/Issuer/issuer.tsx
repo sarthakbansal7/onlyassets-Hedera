@@ -224,7 +224,25 @@ const Issuer: React.FC = () => {
       // Step 1: Upload images to IPFS
       const imageUrls = [];
       for (const file of nftImageFiles) {
-        const imageUrl = await uploadFileToIPFS(file);
+        const imageMetadata = {
+          name: `${nftTitle} - Image`,
+          description: `Image for ${nftTitle}`,
+          attributes: [
+            {
+              trait_type: "Asset Type",
+              value: assetTypes[nftAssetType]
+            },
+            {
+              trait_type: "Price Token", 
+              value: nftPriceToken
+            },
+            {
+              trait_type: "Price",
+              value: parseInt(nftEarnXP)
+            }
+          ]
+        };
+        const imageUrl = await uploadFileToIPFS(file, imageMetadata);
         imageUrls.push(imageUrl);
       }
 
