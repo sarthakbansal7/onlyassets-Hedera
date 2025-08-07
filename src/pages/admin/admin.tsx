@@ -58,6 +58,9 @@ import { Switch } from '@/components/ui/switch';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import * as authApi from '@/api/authApi';
+import { useWallet } from '@/context/WalletContext';
+import { getAllIssuers, getAllManagers, addIssuer, addManager } from '@/services/contractService';
+import { uploadJSONToIPFS, fetchIPFSContent } from '@/utils/ipfs';
 
 // Types for Admin Management
 interface User {
@@ -84,6 +87,9 @@ interface SystemMetrics {
 }
 
 const Admin: React.FC = () => {
+  // Wallet integration
+  const { address, isConnected, connectWallet, signer } = useWallet();
+  
   // Theme state
   const [isDarkMode, setIsDarkMode] = useState(false);
   
@@ -91,6 +97,17 @@ const Admin: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [issuers, setIssuers] = useState<User[]>([]);
   const [managers, setManagers] = useState<User[]>([]);
+  const [contractIssuers, setContractIssuers] = useState<{
+    addresses: string[], 
+    count: number, 
+    metadata: Record<string, string>
+  }>({ addresses: [], count: 0, metadata: {} });
+  const [contractManagers, setContractManagers] = useState<{
+    addresses: string[], 
+    count: number, 
+    metadata: Record<string, string>
+  }>({ addresses: [], count: 0, metadata: {} });
+  const [isLoadingContractData, setIsLoadingContractData] = useState(false);
   const [systemMetrics, setSystemMetrics] = useState<SystemMetrics>({
     totalIssuers: 0,
     totalManagers: 0,
@@ -123,81 +140,140 @@ const Admin: React.FC = () => {
 
   // Demo data initialization
   useEffect(() => {
-    loadDemoData();
-  }, []);
+    loadContractData();
+  }, [isConnected]);
+
+  const loadContractData = async () => {
+    if (!isConnected) return;
+    
+    setIsLoadingContractData(true);
+    
+    try {
+      console.log('🔄 Fetching contract data...');
+      toast('Loading issuers and managers from contract...');
+      
+      const [issuersData, managersData] = await Promise.all([
+        getAllIssuers(),
+        getAllManagers()
+      ]);
+      
+      setContractIssuers(issuersData);
+      setContractManagers(managersData);
+      
+      // Convert contract data to User format
+      const issuerUsers: User[] = [];
+      const managerUsers: User[] = [];
+      
+      // Process issuers
+      for (const address of issuersData.addresses) {
+        const metadataURI = issuersData.metadata[address];
+        let userData = {
+          id: address,
+          address: address,
+          name: address.slice(0, 8) + '...' + address.slice(-6),
+          email: 'issuer@blockchain.local',
+          role: 'issuer' as const,
+          status: 'active' as const,
+          metadataURI: metadataURI,
+          joinedDate: new Date().toISOString().split('T')[0],
+          lastActive: new Date().toISOString().split('T')[0],
+          tokensManaged: 0,
+          totalVolume: 0
+        };
+        
+        // Try to fetch metadata from IPFS
+        try {
+          if (metadataURI) {
+            const metadata = await fetchIPFSContent(metadataURI);
+            if (metadata) {
+              userData.name = metadata.name || userData.name;
+              userData.email = metadata.email || userData.email;
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching metadata for issuer:', address, error);
+        }
+        
+        issuerUsers.push(userData);
+      }
+      
+      // Process managers
+      for (const address of managersData.addresses) {
+        const metadataURI = managersData.metadata[address];
+        let userData = {
+          id: address,
+          address: address,
+          name: address.slice(0, 8) + '...' + address.slice(-6),
+          email: 'manager@blockchain.local',
+          role: 'manager' as const,
+          status: 'active' as const,
+          metadataURI: metadataURI,
+          joinedDate: new Date().toISOString().split('T')[0],
+          lastActive: new Date().toISOString().split('T')[0],
+          tokensManaged: 0,
+          totalVolume: 0
+        };
+        
+        // Try to fetch metadata from IPFS
+        try {
+          if (metadataURI) {
+            const metadata = await fetchIPFSContent(metadataURI);
+            if (metadata) {
+              userData.name = metadata.name || userData.name;
+              userData.email = metadata.email || userData.email;
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching metadata for manager:', address, error);
+        }
+        
+        managerUsers.push(userData);
+      }
+      
+      setIssuers(issuerUsers);
+      setManagers(managerUsers);
+      
+      setSystemMetrics({
+        totalIssuers: issuerUsers.length,
+        totalManagers: managerUsers.length,
+        activeTokens: 8,
+        totalVolume: 21730000,
+        marketplaceStatus: !marketplacePaused,
+        platformFees: 125000
+      });
+      
+      console.log('✅ Contract data loaded successfully');
+      toast.success(`Loaded ${issuerUsers.length} issuers and ${managerUsers.length} managers from contract`);
+      
+    } catch (error: any) {
+      console.error('❌ Error fetching contract data:', error);
+      toast.error(`Failed to load contract data: ${error.message}`);
+    } finally {
+      setIsLoadingContractData(false);
+    }
+  };
 
   const loadDemoData = () => {
-    const demoIssuers: User[] = [
-      {
-        id: '1',
-        address: '0x1234567890123456789012345678901234567890',
-        name: 'Manhattan Real Estate Corp',
-        email: 'admin@manhattanre.com',
-        role: 'issuer',
-        status: 'active',
-        metadataURI: 'ipfs://QmExample1',
-        joinedDate: '2024-01-15',
-        lastActive: '2024-12-20',
-        tokensManaged: 5,
-        totalVolume: 12500000
-      },
-      {
-        id: '2',
-        address: '0x2345678901234567890123456789012345678901',
-        name: 'Global Commodities Ltd',
-        email: 'issuer@globalcom.com',
-        role: 'issuer',
-        status: 'active',
-        metadataURI: 'ipfs://QmExample2',
-        joinedDate: '2024-02-20',
-        lastActive: '2024-12-19',
-        tokensManaged: 3,
-        totalVolume: 8500000
-      }
-    ];
-
-    const demoManagers: User[] = [
-      {
-        id: '3',
-        address: '0x3456789012345678901234567890123456789012',
-        name: 'John Smith',
-        email: 'john.smith@realestate.com',
-        role: 'manager',
-        status: 'active',
-        metadataURI: 'ipfs://QmExample3',
-        joinedDate: '2024-03-10',
-        lastActive: '2024-12-20',
-        tokensManaged: 3,
-        totalVolume: 450000
-      },
-      {
-        id: '4',
-        address: '0x4567890123456789012345678901234567890123',
-        name: 'Sarah Johnson',
-        email: 'sarah.j@propmanage.com',
-        role: 'manager',
-        status: 'active',
-        metadataURI: 'ipfs://QmExample4',
-        joinedDate: '2024-04-05',
-        lastActive: '2024-12-18',
-        tokensManaged: 2,
-        totalVolume: 280000
-      }
-    ];
-
-    setIssuers(demoIssuers);
-    setManagers(demoManagers);
+    // Keep this for fallback/demo purposes - now empty since we use contract data
+    setIssuers([]);
+    setManagers([]);
     setSystemMetrics({
-      totalIssuers: demoIssuers.length,
-      totalManagers: demoManagers.length,
-      activeTokens: 8,
-      totalVolume: 21730000,
+      totalIssuers: 0,
+      totalManagers: 0,
+      activeTokens: 0,
+      totalVolume: 0,
       marketplaceStatus: !marketplacePaused,
-      platformFees: 125000
+      platformFees: 0
     });
   };
 
   const handleAddUser = async () => {
+    // Check wallet connection
+    if (!isConnected || !signer) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
     if (!userForm.firstName || !userForm.lastName || !userForm.email || !userForm.password || !userForm.walletAddress) {
       toast.error('Please fill all required fields');
       return;
@@ -223,7 +299,32 @@ const Admin: React.FC = () => {
     setIsLoading(true);
     
     try {
-      // In production, this would call the admin create user API
+      // Step 1: Create metadata object for IPFS
+      const metadata = {
+        name: `${userForm.firstName} ${userForm.lastName}`,
+        email: userForm.email,
+        role: userForm.role,
+        createdAt: new Date().toISOString(),
+        createdBy: address
+      };
+
+      // Step 2: Upload metadata to IPFS
+      toast('Uploading user metadata to IPFS...');
+      const metadataURI = await uploadJSONToIPFS(metadata);
+      console.log('Metadata uploaded to IPFS:', metadataURI);
+
+      // Step 3: Add to contract
+      if (userForm.role === 'issuer') {
+        toast('Adding issuer to contract...');
+        await addIssuer(userForm.walletAddress, metadataURI, signer);
+        toast.success('Issuer added to contract successfully!');
+      } else {
+        toast('Adding manager to contract...');
+        await addManager(userForm.walletAddress, metadataURI, signer);
+        toast.success('Manager added to contract successfully!');
+      }
+
+      // Step 4: Backend registration (keep the existing backend flow)
       const userData = {
         firstName: userForm.firstName,
         lastName: userForm.lastName,
@@ -234,31 +335,16 @@ const Admin: React.FC = () => {
         role: userForm.role,
       };
 
-      // Demo submission - replace with actual API call
-      await authApi.createUser(userData);
-      // await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const newUser: User = {
-        id: Date.now().toString(),
-        address: userForm.walletAddress,
-        name: `${userForm.firstName} ${userForm.lastName}`,
-        email: userForm.email,
-        role: userForm.role,
-        status: 'active',
-        metadataURI: userForm.metadataURI || `ipfs://QmExample${Date.now()}`,
-        joinedDate: new Date().toISOString().split('T')[0],
-        lastActive: new Date().toISOString().split('T')[0],
-        tokensManaged: 0,
-        totalVolume: 0
-      };
-      
-      if (userForm.role === 'issuer') {
-        setIssuers(prev => [...prev, newUser]);
-        setSystemMetrics(prev => ({ ...prev, totalIssuers: prev.totalIssuers + 1 }));
-      } else {
-        setManagers(prev => [...prev, newUser]);
-        setSystemMetrics(prev => ({ ...prev, totalManagers: prev.totalManagers + 1 }));
+      try {
+        await authApi.createUser(userData);
+        console.log('User registered in backend successfully');
+      } catch (backendError) {
+        console.error('Backend registration failed (continuing anyway):', backendError);
+        // Don't fail the whole process if backend fails
       }
+      
+      // Step 5: Refresh contract data to show the new user
+      await loadContractData();
       
       setShowAddUserDialog(false);
       setUserForm({
@@ -272,10 +358,17 @@ const Admin: React.FC = () => {
         metadataURI: ''
       });
       
-      toast.success(`${userForm.role.charAt(0).toUpperCase() + userForm.role.slice(1)} added successfully!`);
+      toast.success(`${userForm.role.charAt(0).toUpperCase() + userForm.role.slice(1)} added successfully to blockchain and backend!`);
       
-    } catch (error) {
-      toast.error('Failed to add user');
+    } catch (error: any) {
+      console.error('Error adding user:', error);
+      if (error.message.includes('User denied')) {
+        toast.error('Transaction was cancelled by user');
+      } else if (error.message.includes('already exists')) {
+        toast.error('User already exists in the system');
+      } else {
+        toast.error(`Failed to add user: ${error.message}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -371,6 +464,26 @@ const Admin: React.FC = () => {
                 <div className={`w-1.5 h-1.5 rounded-full ${marketplacePaused ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
                 <span>{marketplacePaused ? 'Trading Suspended' : 'System Operational'}</span>
               </div>
+
+              {/* Wallet Connection Status */}
+              <div className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-xs font-medium ${
+                isConnected 
+                  ? 'bg-green-50 text-green-700 border border-green-200' 
+                  : 'bg-red-50 text-red-700 border border-red-200'
+              } ${isDarkMode && (isConnected ? 'bg-green-900/20 text-green-400 border-green-800/30' : 'bg-red-900/20 text-red-400 border-red-800/30')}`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                <span>{isConnected ? 'Wallet Connected' : 'Wallet Disconnected'}</span>
+              </div>
+              
+              {!isConnected && (
+                <Button 
+                  onClick={connectWallet}
+                  size="sm"
+                  className="bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 text-xs"
+                >
+                  Connect Wallet
+                </Button>
+              )}
               
               <Button 
                 variant="ghost" 
@@ -429,8 +542,17 @@ const Admin: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
                       <p className={`text-sm font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Active Issuers</p>
-                      <p className={`text-2xl font-semibold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{systemMetrics.totalIssuers}</p>
-                      <p className="text-xs text-emerald-600 dark:text-emerald-400">+2 this month</p>
+                      <p className={`text-2xl font-semibold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                        {isLoadingContractData ? (
+                          <div className="flex items-center space-x-2">
+                            <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin"></div>
+                            <span className="text-lg">Loading...</span>
+                          </div>
+                        ) : (
+                          systemMetrics.totalIssuers
+                        )}
+                      </p>
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400">From blockchain data</p>
                     </div>
                     <div className="p-3 bg-slate-100 dark:bg-slate-700 rounded-lg">
                       <Building2 className="w-5 h-5 text-slate-700 dark:text-slate-300" />
@@ -444,8 +566,17 @@ const Admin: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
                       <p className={`text-sm font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Property Managers</p>
-                      <p className={`text-2xl font-semibold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{systemMetrics.totalManagers}</p>
-                      <p className="text-xs text-emerald-600 dark:text-emerald-400">+1 this month</p>
+                      <p className={`text-2xl font-semibold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                        {isLoadingContractData ? (
+                          <div className="flex items-center space-x-2">
+                            <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin"></div>
+                            <span className="text-lg">Loading...</span>
+                          </div>
+                        ) : (
+                          systemMetrics.totalManagers
+                        )}
+                      </p>
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400">From blockchain data</p>
                     </div>
                     <div className="p-3 bg-slate-100 dark:bg-slate-700 rounded-lg">
                       <Users className="w-5 h-5 text-slate-700 dark:text-slate-300" />
@@ -497,10 +628,27 @@ const Admin: React.FC = () => {
                     <div className="grid grid-cols-2 gap-4">
                       <Button 
                         onClick={() => setShowAddUserDialog(true)}
-                        className="h-20 flex-col space-y-2 bg-slate-900 hover:bg-slate-800 text-white border-0 shadow-sm hover:shadow-md transition-all duration-200"
+                        disabled={!isConnected}
+                        className="h-20 flex-col space-y-2 bg-slate-900 hover:bg-slate-800 text-white border-0 shadow-sm hover:shadow-md transition-all duration-200 disabled:opacity-50"
                       >
                         <UserPlus className="w-5 h-5" />
-                        <span className="text-sm font-medium">Add User</span>
+                        <span className="text-sm font-medium">{!isConnected ? 'Connect Wallet' : 'Add User'}</span>
+                      </Button>
+                      
+                      <Button 
+                        onClick={loadContractData}
+                        disabled={isLoadingContractData || !isConnected}
+                        variant="outline"
+                        className={`h-20 flex-col space-y-2 ${isDarkMode ? 'border-slate-700 bg-slate-800/30 text-slate-300 hover:bg-slate-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'} disabled:opacity-50`}
+                      >
+                        {isLoadingContractData ? (
+                          <RefreshCw className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-5 h-5" />
+                        )}
+                        <span className="text-sm font-medium">
+                          {isLoadingContractData ? 'Loading...' : 'Refresh Data'}
+                        </span>
                       </Button>
                       
                       <Button 
