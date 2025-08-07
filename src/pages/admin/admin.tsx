@@ -59,7 +59,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import * as authApi from '@/api/authApi';
 import { useWallet } from '@/context/WalletContext';
-import { getAllIssuers, getAllManagers, addIssuer, addManager, removeIssuer, removeManager } from '@/services/contractService';
+import { getAllIssuers, getAllManagers, addIssuer, addManager, removeIssuer, removeManager, pauseMarketplace, getMarketplacePaused } from '@/services/contractService';
 import { uploadJSONToIPFS, fetchIPFSContent } from '@/utils/ipfs';
 
 // Types for Admin Management
@@ -121,6 +121,7 @@ const Admin: React.FC = () => {
   const [showAddUserDialog, setShowAddUserDialog] = useState(false);
   const [showUserDetailsDialog, setShowUserDetailsDialog] = useState(false);
   const [showRemoveUserDialog, setShowRemoveUserDialog] = useState(false);
+  const [showMarketplaceToggleDialog, setShowMarketplaceToggleDialog] = useState(false);
   
   // Form states
   const [userForm, setUserForm] = useState({
@@ -143,6 +144,20 @@ const Admin: React.FC = () => {
     loadContractData();
   }, [isConnected]);
 
+  // Load marketplace status on mount
+  useEffect(() => {
+    const loadMarketplaceStatus = async () => {
+      try {
+        const isPaused = await getMarketplacePaused();
+        setMarketplacePaused(isPaused);
+      } catch (error) {
+        console.error('Error loading marketplace status:', error);
+      }
+    };
+    
+    loadMarketplaceStatus();
+  }, []);
+
   const loadContractData = async () => {
     if (!isConnected) return;
     
@@ -150,15 +165,16 @@ const Admin: React.FC = () => {
     
     try {
       console.log('🔄 Fetching contract data...');
-      toast('Loading issuers and managers from contract...');
       
-      const [issuersData, managersData] = await Promise.all([
+      const [issuersData, managersData, marketplacePausedStatus] = await Promise.all([
         getAllIssuers(),
-        getAllManagers()
+        getAllManagers(),
+        getMarketplacePaused()
       ]);
       
       setContractIssuers(issuersData);
       setContractManagers(managersData);
+      setMarketplacePaused(marketplacePausedStatus);
       
       // Convert contract data to User format
       const issuerUsers: User[] = [];
@@ -170,8 +186,8 @@ const Admin: React.FC = () => {
         let userData = {
           id: address,
           address: address,
-          name: 'Loading...',
-          email: 'Loading...',
+          name: `Issuer ${address.slice(0, 6)}...${address.slice(-4)}`,
+          email: `issuer-${address.slice(0, 8)}@platform.local`,
           role: 'issuer' as const,
           status: 'active' as const,
           metadataURI: metadataURI,
@@ -181,28 +197,24 @@ const Admin: React.FC = () => {
           totalVolume: 0
         };
         
-        // Try to fetch metadata from IPFS
+        // Try to fetch metadata from IPFS silently
         try {
-          if (metadataURI) {
-            console.log(`Fetching metadata for issuer ${address}:`, metadataURI);
+          if (metadataURI && metadataURI !== '' && metadataURI !== 'undefined') {
+            console.log(`Fetching metadata for issuer ${address} from URI: ${metadataURI}`);
             const metadata = await fetchIPFSContent(metadataURI);
             if (metadata && metadata.name && metadata.email) {
               userData.name = metadata.name;
               userData.email = metadata.email;
-              console.log(`✅ Metadata loaded for issuer ${address}:`, metadata.name, metadata.email);
+              console.log(`Successfully loaded metadata for issuer ${address}:`, { name: metadata.name, email: metadata.email });
             } else {
-              console.log(`⚠️ Incomplete metadata for issuer ${address}`);
-              userData.name = `Issuer ${address.slice(0, 6)}...${address.slice(-4)}`;
-              userData.email = `issuer-${address.slice(0, 8)}@platform.local`;
+              console.log(`No valid metadata found for issuer ${address}`, metadata);
             }
           } else {
-            userData.name = `Issuer ${address.slice(0, 6)}...${address.slice(-4)}`;
-            userData.email = `issuer-${address.slice(0, 8)}@platform.local`;
+            console.log(`No metadata URI for issuer ${address}`);
           }
         } catch (error) {
-          console.error('Error fetching metadata for issuer:', address, error);
-          userData.name = `Issuer ${address.slice(0, 6)}...${address.slice(-4)}`;
-          userData.email = `issuer-${address.slice(0, 8)}@platform.local`;
+          // Silently fail and use fallback data
+          console.log(`Using fallback data for issuer ${address} due to error:`, error);
         }
         
         issuerUsers.push(userData);
@@ -214,8 +226,8 @@ const Admin: React.FC = () => {
         let userData = {
           id: address,
           address: address,
-          name: 'Loading...',
-          email: 'Loading...',
+          name: `Manager ${address.slice(0, 6)}...${address.slice(-4)}`,
+          email: `manager-${address.slice(0, 8)}@platform.local`,
           role: 'manager' as const,
           status: 'active' as const,
           metadataURI: metadataURI,
@@ -225,28 +237,24 @@ const Admin: React.FC = () => {
           totalVolume: 0
         };
         
-        // Try to fetch metadata from IPFS
+        // Try to fetch metadata from IPFS silently
         try {
-          if (metadataURI) {
-            console.log(`Fetching metadata for manager ${address}:`, metadataURI);
+          if (metadataURI && metadataURI !== '' && metadataURI !== 'undefined') {
+            console.log(`Fetching metadata for manager ${address} from URI: ${metadataURI}`);
             const metadata = await fetchIPFSContent(metadataURI);
             if (metadata && metadata.name && metadata.email) {
               userData.name = metadata.name;
               userData.email = metadata.email;
-              console.log(`✅ Metadata loaded for manager ${address}:`, metadata.name, metadata.email);
+              console.log(`Successfully loaded metadata for manager ${address}:`, { name: metadata.name, email: metadata.email });
             } else {
-              console.log(`⚠️ Incomplete metadata for manager ${address}`);
-              userData.name = `Manager ${address.slice(0, 6)}...${address.slice(-4)}`;
-              userData.email = `manager-${address.slice(0, 8)}@platform.local`;
+              console.log(`No valid metadata found for manager ${address}`, metadata);
             }
           } else {
-            userData.name = `Manager ${address.slice(0, 6)}...${address.slice(-4)}`;
-            userData.email = `manager-${address.slice(0, 8)}@platform.local`;
+            console.log(`No metadata URI for manager ${address}`);
           }
         } catch (error) {
-          console.error('Error fetching metadata for manager:', address, error);
-          userData.name = `Manager ${address.slice(0, 6)}...${address.slice(-4)}`;
-          userData.email = `manager-${address.slice(0, 8)}@platform.local`;
+          // Silently fail and use fallback data
+          console.log(`Using fallback data for manager ${address} due to error:`, error);
         }
         
         managerUsers.push(userData);
@@ -265,7 +273,6 @@ const Admin: React.FC = () => {
       });
       
       console.log('✅ Contract data loaded successfully');
-      toast.success(`Loaded ${issuerUsers.length} issuers and ${managerUsers.length} managers from contract`);
       
     } catch (error: any) {
       console.error('❌ Error fetching contract data:', error);
@@ -331,7 +338,6 @@ const Admin: React.FC = () => {
       };
 
       // Step 2: Upload metadata to IPFS
-      toast('Uploading user metadata to IPFS...');
       const metadataURI = await uploadJSONToIPFS(metadata);
       console.log('Metadata uploaded to IPFS:', metadataURI);
 
@@ -339,11 +345,11 @@ const Admin: React.FC = () => {
       if (userForm.role === 'issuer') {
         toast('Adding issuer to contract...');
         await addIssuer(userForm.walletAddress, metadataURI, signer);
-        toast.success('Issuer added to contract successfully!');
+        toast.success('Issuer added successfully!');
       } else {
         toast('Adding manager to contract...');
         await addManager(userForm.walletAddress, metadataURI, signer);
-        toast.success('Manager added to contract successfully!');
+        toast.success('Manager added successfully!');
       }
 
       // Step 4: Backend registration (keep the existing backend flow)
@@ -380,7 +386,7 @@ const Admin: React.FC = () => {
         metadataURI: ''
       });
       
-      toast.success(`${userForm.role.charAt(0).toUpperCase() + userForm.role.slice(1)} added successfully to blockchain and backend!`);
+      toast.success(`${userForm.role.charAt(0).toUpperCase() + userForm.role.slice(1)} added successfully!`);
       
     } catch (error: any) {
       console.error('Error adding user:', error);
@@ -411,21 +417,24 @@ const Admin: React.FC = () => {
       // Remove from contract first
       if (selectedUser.role === 'issuer') {
         toast('Removing issuer from contract...');
-        await removeIssuer(selectedUser.address, signer);
-        toast.success('Issuer removed from contract successfully!');
+        const tx = await removeIssuer(selectedUser.address, signer);
+        console.log('Remove issuer transaction:', tx);
+        toast.success('Issuer removed successfully!');
       } else {
         toast('Removing manager from contract...');
-        await removeManager(selectedUser.address, signer);
-        toast.success('Manager removed from contract successfully!');
+        const tx = await removeManager(selectedUser.address, signer);
+        console.log('Remove manager transaction:', tx);
+        toast.success('Manager removed successfully!');
       }
+
+      // Wait a moment for the blockchain to update
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Refresh contract data to reflect the removal
       await loadContractData();
       
       setShowRemoveUserDialog(false);
       setSelectedUser(null);
-      
-      toast.success(`${selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1)} removed successfully from blockchain!`);
       
     } catch (error: any) {
       console.error('Error removing user:', error);
@@ -442,21 +451,49 @@ const Admin: React.FC = () => {
   };
 
   const handleToggleMarketplace = async () => {
+    // Check wallet connection
+    if (!isConnected || !signer) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
     setIsLoading(true);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Call the contract to toggle marketplace pause status
+      const action = marketplacePaused ? 'Resuming' : 'Pausing';
+      toast(`${action} marketplace...`);
       
-      setMarketplacePaused(!marketplacePaused);
-      setSystemMetrics(prev => ({ ...prev, marketplaceStatus: marketplacePaused }));
+      const tx = await pauseMarketplace(signer);
+      console.log('Marketplace toggle transaction:', tx);
       
-      toast.success(marketplacePaused ? 'Marketplace resumed' : 'Marketplace paused');
+      // Wait a moment for the blockchain to update
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-    } catch (error) {
-      toast.error('Failed to toggle marketplace');
+      // Fetch the updated marketplace status from contract
+      const newStatus = await getMarketplacePaused();
+      setMarketplacePaused(newStatus);
+      setSystemMetrics(prev => ({ ...prev, marketplaceStatus: !newStatus }));
+      
+      toast.success(newStatus ? 'Marketplace paused successfully' : 'Marketplace resumed successfully');
+      
+      // Close the confirmation dialog
+      setShowMarketplaceToggleDialog(false);
+      
+    } catch (error: any) {
+      console.error('Error toggling marketplace:', error);
+      if (error.message.includes('User denied')) {
+        toast.error('Transaction was cancelled by user');
+      } else {
+        toast.error(`Failed to toggle marketplace: ${error.message}`);
+      }
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleMarketplaceToggleRequest = () => {
+    setShowMarketplaceToggleDialog(true);
   };
 
   const getStatusIcon = (status: string) => {
@@ -956,15 +993,15 @@ const Admin: React.FC = () => {
                     </div>
                     <Switch 
                       checked={!marketplacePaused}
-                      onCheckedChange={handleToggleMarketplace}
-                      disabled={isLoading}
+                      onCheckedChange={handleMarketplaceToggleRequest}
+                      disabled={isLoading || !isConnected}
                     />
                   </div>
                   
                   <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
                     <Button 
-                      onClick={handleToggleMarketplace}
-                      disabled={isLoading}
+                      onClick={handleMarketplaceToggleRequest}
+                      disabled={isLoading || !isConnected}
                       className="w-full"
                       variant={marketplacePaused ? "default" : "destructive"}
                     >
@@ -1265,6 +1302,106 @@ const Admin: React.FC = () => {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Marketplace Toggle Confirmation Dialog */}
+      <Dialog open={showMarketplaceToggleDialog} onOpenChange={setShowMarketplaceToggleDialog}>
+        <DialogContent className={`sm:max-w-md ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} shadow-xl`}>
+          <DialogHeader className="space-y-3">
+            <div className="flex items-center space-x-3">
+              <div className={`p-2 rounded-full ${marketplacePaused ? 'bg-green-100 dark:bg-green-900/20' : 'bg-red-100 dark:bg-red-900/20'}`}>
+                {marketplacePaused ? (
+                  <Unlock className={`w-5 h-5 ${marketplacePaused ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
+                ) : (
+                  <Lock className="w-5 h-5 text-red-600 dark:text-red-400" />
+                )}
+              </div>
+              <div>
+                <DialogTitle className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                  {marketplacePaused ? 'Resume Trading' : 'Suspend Trading'}
+                </DialogTitle>
+                <DialogDescription className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                  This action will affect the entire marketplace operations
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          
+          <div className="py-4">
+            <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-slate-700/50' : 'bg-slate-50'} border ${isDarkMode ? 'border-slate-600' : 'border-slate-200'}`}>
+              {marketplacePaused ? (
+                <>
+                  <p className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-slate-900'} mb-2`}>
+                    ✅ Resume Marketplace Trading
+                  </p>
+                  <p className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-700'} mb-3`}>
+                    This will enable all trading operations across the platform:
+                  </p>
+                  <ul className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'} space-y-1 ml-4`}>
+                    <li>• Token buying and selling will be enabled</li>
+                    <li>• All marketplace functions will be active</li>
+                    <li>• Users can perform transactions normally</li>
+                    <li>• Platform fees and commissions will apply</li>
+                  </ul>
+                </>
+              ) : (
+                <>
+                  <p className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-slate-900'} mb-2`}>
+                    ⚠️ Suspend All Marketplace Trading
+                  </p>
+                  <p className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-700'} mb-3`}>
+                    This will immediately halt all trading operations:
+                  </p>
+                  <ul className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'} space-y-1 ml-4`}>
+                    <li>• All token purchases will be disabled</li>
+                    <li>• Existing listings will be suspended</li>
+                    <li>• Users cannot buy or sell any assets</li>
+                    <li>• Only viewing functions will remain active</li>
+                  </ul>
+                </>
+              )}
+              
+              <div className={`mt-3 p-3 rounded ${isDarkMode ? 'bg-orange-900/20 border border-orange-800/30' : 'bg-orange-50 border border-orange-200'}`}>
+                <p className={`text-xs font-medium ${isDarkMode ? 'text-orange-400' : 'text-orange-700'}`}>
+                  ⚡ This action requires a blockchain transaction and will affect all users immediately.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="space-x-2">
+            <Button variant="outline" onClick={() => setShowMarketplaceToggleDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleToggleMarketplace} 
+              disabled={isLoading || !isConnected}
+              variant={marketplacePaused ? "default" : "destructive"}
+              className={marketplacePaused ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"}
+            >
+              {isLoading ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  {marketplacePaused ? (
+                    <>
+                      <Unlock className="w-4 h-4 mr-2" />
+                      Confirm Resume Trading
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-4 h-4 mr-2" />
+                      Confirm Suspend Trading
+                    </>
+                  )}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
