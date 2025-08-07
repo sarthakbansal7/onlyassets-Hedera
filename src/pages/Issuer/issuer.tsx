@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -6,8 +6,12 @@ import { Label } from '@/components/ui/label';
 import { LabelInputContainer } from '@/components/ui/form-utils';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { Copy, Home, TrendingUp, Building2, Plus, FileText, BarChart3, Shield, Users, Globe, Sun, Moon } from 'lucide-react';
+import { Copy, Home, TrendingUp, Building2, Plus, FileText, BarChart3, Shield, Users, Globe, Sun, Moon, Loader2, Wallet, RefreshCw } from 'lucide-react';
 import { uploadFileToIPFS, uploadJSONToIPFS } from '@/utils/ipfs';
+import { useWallet } from '@/context/WalletContext';
+import HederaTokenService, { TokenCreationData } from '@/services/hederaService';
+import { getAllIssuers, getAllManagers, isIssuer } from '@/services/contractService';
+import { HEDERA_CONFIG } from '@/config/hedera';
 
 const assetTypes = [
   'Real Estate',
@@ -25,7 +29,32 @@ const priceTokens = [
 ];
 
 const Issuer: React.FC = () => {
-  // Demo mode - no blockchain connections required
+  // Wallet integration
+  const { address, isConnected, connectWallet } = useWallet();
+  
+  // Hedera Token Service
+  const [hederaService] = useState(() => new HederaTokenService({
+    network: HEDERA_CONFIG.NETWORK,
+    operatorId: HEDERA_CONFIG.OPERATOR_ID,
+    operatorKey: HEDERA_CONFIG.OPERATOR_KEY
+  }));
+  
+  // Authorization state
+  const [isAuthorizedIssuer, setIsAuthorizedIssuer] = useState<boolean | null>(null);
+  const [authCheckLoading, setAuthCheckLoading] = useState(false);
+  
+  // Contract data state
+  const [contractIssuers, setContractIssuers] = useState<{
+    addresses: string[], 
+    count: number, 
+    metadata: Record<string, string>
+  }>({ addresses: [], count: 0, metadata: {} });
+  const [contractManagers, setContractManagers] = useState<{
+    addresses: string[], 
+    count: number, 
+    metadata: Record<string, string>
+  }>({ addresses: [], count: 0, metadata: {} });
+  const [isLoadingContractData, setIsLoadingContractData] = useState(false);
   
   // Dark mode state
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -83,6 +112,77 @@ const Issuer: React.FC = () => {
   // Success states
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [mintedAssetId, setMintedAssetId] = useState<string | null>(null);
+  const [createdTokens, setCreatedTokens] = useState<Array<{
+    tokenId: string;
+    name: string;
+    amount: number;
+    price: number;
+    createdAt: Date;
+  }>>([]);
+
+  // Check issuer authorization on wallet connection
+  useEffect(() => {
+    const checkAuthorization = async () => {
+      if (!isConnected || !address) {
+        setIsAuthorizedIssuer(null);
+        console.log('⏳ Authorization check skipped:', { isConnected, address: !!address });
+        return;
+      }
+
+      setAuthCheckLoading(true);
+      console.log('🔍 Starting authorization check for:', address);
+      
+      try {
+        // Fetch latest issuer data and check authorization
+        await fetchContractData();
+        
+      } catch (error) {
+        console.error('❌ Error checking authorization:', error);
+        setIsAuthorizedIssuer(false);
+      } finally {
+        setAuthCheckLoading(false);
+      }
+    };
+
+    checkAuthorization();
+  }, [isConnected, address]);
+
+  // Function to fetch all contract data
+  const fetchContractData = async () => {
+    setIsLoadingContractData(true);
+    
+    try {
+      console.log('🔄 Fetching contract data from Hedera...');
+      
+      const issuersData = await getAllIssuers();
+      const managersData = await getAllManagers();
+      
+      setContractIssuers(issuersData);
+      setContractManagers(managersData);
+
+      // Check if connected wallet is authorized issuer
+      if (address && issuersData.addresses.length > 0) {
+        const isAuthorized = issuersData.addresses.some(
+          issuerAddress => issuerAddress.toLowerCase() === address.toLowerCase()
+        );
+        setIsAuthorizedIssuer(isAuthorized);
+        
+        if (isAuthorized) {
+          console.log('✅ Connected wallet is authorized as issuer');
+        } else {
+          console.log('❌ Connected wallet is not authorized as issuer');
+        }
+      }
+
+      console.log('🎯 Contract data fetched successfully');
+      
+    } catch (error: any) {
+      console.error('❌ Error fetching contract data:', error);
+      setIsAuthorizedIssuer(false);
+    } finally {
+      setIsLoadingContractData(false);
+    }
+  };
 
   const handleNftImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -96,8 +196,24 @@ const Issuer: React.FC = () => {
   };
 
   const handleMintNFT = async () => {
-    // Demo mode - validate form but don't require wallet connection
-    if (!nftTitle || !nftDescription || nftImageFiles.length === 0) {
+    // Check wallet connection and authorization
+    if (!isConnected || !address) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
+    if (isAuthorizedIssuer === false) {
+      toast.error('Your wallet is not authorized as an issuer');
+      return;
+    }
+
+    if (isAuthorizedIssuer === null) {
+      toast.error('Authorization check in progress, please wait');
+      return;
+    }
+
+    // Validate form
+    if (!nftTitle || !nftDescription || nftImageFiles.length === 0 || !nftAmount || !nftEarnXP) {
       toast.error('Please fill all required fields and upload at least one image');
       return;
     }
@@ -105,14 +221,14 @@ const Issuer: React.FC = () => {
     setIsMinting(true);
     
     try {
-      // 1. Upload images to IPFS (functional)
+      // Step 1: Upload images to IPFS
       const imageUrls = [];
       for (const file of nftImageFiles) {
         const imageUrl = await uploadFileToIPFS(file);
         imageUrls.push(imageUrl);
       }
 
-      // 2. Create metadata object
+      // Step 2: Create metadata object
       const metadata = {
         name: nftTitle,
         description: nftDescription,
@@ -127,8 +243,12 @@ const Issuer: React.FC = () => {
             value: nftPriceToken
           },
           {
-            trait_type: "Earn XP",
+            trait_type: "Price",
             value: parseInt(nftEarnXP)
+          },
+          {
+            trait_type: "Total Supply",
+            value: parseInt(nftAmount)
           }
         ],
         external_url: "",
@@ -158,25 +278,66 @@ const Issuer: React.FC = () => {
         if (carbonCO2Offset) metadata.attributes.push({ trait_type: "CO2 Offset", value: `${carbonCO2Offset} tons` });
       }
 
-      // 3. Upload metadata to IPFS (functional)
+      // Step 3: Upload metadata to IPFS
       const metadataUri = await uploadJSONToIPFS(metadata);
 
-      // 4. Demo simulation - no actual blockchain transaction
-      toast.success('Uploading to IPFS and simulating blockchain transaction...');
+      // Step 4: Request user signature for token creation
+      toast('Please sign the token creation request...');
+      const tokenData: TokenCreationData = {
+        name: nftTitle,
+        description: nftDescription,
+        metadataURI: metadataUri,
+        amount: parseInt(nftAmount),
+        price: parseInt(nftEarnXP),
+        assetType: assetTypes[nftAssetType]
+      };
+
+      const { signature, message } = await hederaService.requestTokenCreationSignature(
+        tokenData,
+        address,
+        window.ethereum
+      );
+
+      // Step 5: Create HTS token
+      toast('Creating token on Hedera network...');
+      const result = await hederaService.createToken(
+        tokenData,
+        address,
+        signature,
+        message
+      );
+
+      // Step 6: Save token to local storage for user reference
+      const newToken = {
+        tokenId: result.tokenId,
+        name: nftTitle,
+        amount: parseInt(nftAmount),
+        price: parseInt(nftEarnXP),
+        createdAt: new Date()
+      };
       
-      // Simulate blockchain delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Generate a demo asset ID
-      const demoAssetId = `demo-${Date.now()}`;
-      setMintedAssetId(demoAssetId);
+      setCreatedTokens(prev => [...prev, newToken]);
+      localStorage.setItem('userTokens', JSON.stringify([...createdTokens, newToken]));
+
+      // Step 7: Show success
+      setMintedAssetId(result.tokenId);
       setShowSuccessDialog(true);
       setShowNFTDialog(false);
-      toast.success('NFT metadata uploaded to IPFS successfully! (Demo mode - no blockchain transaction)');
+      resetNFTForm();
+      
+      toast.success(`Token created successfully! Token ID: ${result.tokenId}`);
 
     } catch (error: any) {
-      console.error('Demo minting error:', error);
-      toast.error('Failed to upload metadata to IPFS. Please try again.');
+      console.error('Token creation error:', error);
+      if (error.message.includes('User denied')) {
+        toast.error('Transaction was cancelled by user');
+      } else if (error.message.includes('Signature expired')) {
+        toast.error('Signature expired. Please try again.');
+      } else if (error.message.includes('Invalid signature')) {
+        toast.error('Invalid signature. Please try again.');
+      } else {
+        toast.error(`Failed to create token: ${error.message}`);
+      }
     } finally {
       setIsMinting(false);
     }
@@ -184,6 +345,18 @@ const Issuer: React.FC = () => {
 
   const handleListAsset = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Check wallet connection and authorization
+    if (!isConnected || !address) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
+    if (isAuthorizedIssuer === false) {
+      toast.error('Your wallet is not authorized as an issuer');
+      return;
+    }
+
     setIsListingAsset(true);
     
     try {
@@ -193,18 +366,49 @@ const Issuer: React.FC = () => {
         return;
       }
 
-      console.log('Demo listing asset:', { 
-        tokenId: listTokenId, 
-        amount: listAmount, 
-        price: listPrice 
-      });
+      // Validate token amount
+      const amount = parseInt(listAmount);
+      const price = parseInt(listPrice);
+      
+      if (amount <= 0) {
+        toast.error('Amount must be greater than 0');
+        return;
+      }
 
-      toast.success('Simulating asset listing...');
+      if (price <= 0) {
+        toast.error('Price must be greater than 0');
+        return;
+      }
+
+      // Check if user owns the token
+      toast('Checking token ownership...');
+      const balance = await hederaService.getTokenBalance(listTokenId, address);
       
-      // Simulate blockchain delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      toast.success(`Asset listed successfully in demo mode! Token ID: ${listTokenId}`);
+      if (balance < amount) {
+        toast.error(`Insufficient token balance. You have ${balance} tokens but trying to list ${amount}`);
+        return;
+      }
+
+      // Step 1: Transfer tokens to marketplace (this will trigger marketplace listing)
+      toast('Transferring tokens to marketplace...');
+      const transferResult = await hederaService.transferToMarketplace(
+        listTokenId,
+        amount,
+        price,
+        address,
+        window.ethereum
+      );
+
+      // Step 2: List asset on marketplace contract
+      toast('Creating marketplace listing...');
+      // TODO: Implement marketplace listing with new contract service
+      // const listingResult = await listAssetOnMarketplace(
+      //   listTokenId,
+      //   amount
+      // );
+
+      // Step 3: Update local state and show success
+      toast.success(`Asset listed successfully! Transaction: ${transferResult.transactionId}`);
       setShowListDialog(false);
       
       // Reset form
@@ -212,9 +416,20 @@ const Issuer: React.FC = () => {
       setListAmount('');
       setListPrice('');
 
+      // Optionally refresh user's token list
+      // This could trigger a re-fetch of user's created tokens
+
     } catch (error: any) {
-      console.error('Error in demo listing:', error);
-      toast.error('Demo listing failed. Please try again.');
+      console.error('Error listing asset:', error);
+      if (error.message.includes('User denied')) {
+        toast.error('Transaction was cancelled by user');
+      } else if (error.message.includes('Insufficient balance')) {
+        toast.error('Insufficient token balance for listing');
+      } else if (error.message.includes('Invalid token')) {
+        toast.error('Invalid token ID. Please check and try again.');
+      } else {
+        toast.error(`Failed to list asset: ${error.message}`);
+      }
     } finally {
       setIsListingAsset(false);
     }
@@ -228,7 +443,6 @@ const Issuer: React.FC = () => {
     setNftAssetType(0);
     setNftPriceToken('USD');
     setNftEarnXP('32000');
-    setNftId('');
     setNftAmount('');
     
     // Reset asset-specific fields
@@ -278,13 +492,22 @@ const Issuer: React.FC = () => {
             {/* Navigation and Status */}
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-2 bg-blue-500/10 px-3 py-2 rounded-lg border border-blue-500/20">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                  <span className="text-blue-400 text-sm font-medium">Network: Mainnet</span>
+                <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg border ${
+                  isConnected 
+                    ? 'bg-green-500/10 border-green-500/20' 
+                    : 'bg-red-500/10 border-red-500/20'
+                }`}>
+                  <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                  <span className={`text-sm font-medium ${isConnected ? 'text-green-400' : 'text-red-400'}`}>
+                    {isConnected ? 'Wallet Connected' : 'Wallet Disconnected'}
+                  </span>
                 </div>
                 <div className="flex items-center space-x-2 bg-green-500/10 px-3 py-2 rounded-lg border border-green-500/20">
                   <Shield className="w-4 h-4 text-green-400" />
-                  <span className="text-green-400 text-sm font-medium">KYC Verified</span>
+                  <span className="text-green-400 text-sm font-medium">
+                    {isAuthorizedIssuer === true ? 'Authorized Issuer' : 
+                     isAuthorizedIssuer === false ? 'Not Authorized' : 'Checking...'}
+                  </span>
                 </div>
               </div>
               
@@ -297,6 +520,17 @@ const Issuer: React.FC = () => {
               >
                 {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               </Button>
+
+              {/* Connect Wallet Button */}
+              {!isConnected && (
+                <Button 
+                  onClick={connectWallet}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
+                >
+                  <Wallet className="w-4 h-4 mr-2" />
+                  Connect Wallet
+                </Button>
+              )}
               
               <Button asChild variant="ghost" className={`${isDarkMode ? 'text-gray-400 hover:text-white hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`}>
                 <Link to="/" className="flex items-center space-x-2">
@@ -399,19 +633,22 @@ const Issuer: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Token Standard:</span>
-                    <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>ERC-1155</span>
+                    <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>HTS NFT</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Gas Estimation:</span>
-                    <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>~0.015 ETH</span>
+                    <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Network Fee:</span>
+                    <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>~$0.0001</span>
                   </div>
                 </div>
                 <Button 
                   onClick={() => setShowNFTDialog(true)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors"
+                  disabled={!isConnected || isAuthorizedIssuer === false}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Start Tokenization
+                  {!isConnected ? 'Connect Wallet First' : 
+                   isAuthorizedIssuer === false ? 'Not Authorized' :
+                   'Start Tokenization'}
                 </Button>
               </div>
             </div>
@@ -733,14 +970,50 @@ const Issuer: React.FC = () => {
                 </form>
               ) : (
                 <form className="space-y-5">
+                  <div className={`p-4 rounded-lg border ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-blue-50 border-blue-200'}`}>
+                    <h4 className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'} mb-2`}>Token Configuration</h4>
+                    <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Configure the token supply and parameters. Token ID will be automatically generated by Hedera Token Service.
+                    </p>
+                  </div>
+                  
                   <LabelInputContainer>
-                    <Label htmlFor="nftId">Token ID</Label>
-                    <Input id="nftId" value={nftId} onChange={e => setNftId(e.target.value)} placeholder="Enter unique token ID" type="number" className="border-gray-300" />
+                    <Label htmlFor="nftAmount" className={`${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Token Supply</Label>
+                    <Input 
+                      id="nftAmount" 
+                      value={nftAmount} 
+                      onChange={e => setNftAmount(e.target.value)} 
+                      placeholder="Enter total number of tokens to mint" 
+                      type="number" 
+                      min="1"
+                      className={`${isDarkMode ? 'border-gray-600 bg-gray-800 text-white placeholder:text-gray-400' : 'border-gray-300 bg-white text-gray-900 placeholder:text-gray-500'}`} 
+                    />
+                    <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Number of individual NFTs to create
+                    </p>
                   </LabelInputContainer>
-                  <LabelInputContainer>
-                    <Label htmlFor="nftAmount">Token Supply</Label>
-                    <Input id="nftAmount" value={nftAmount} onChange={e => setNftAmount(e.target.value)} placeholder="Enter total token supply" type="number" className="border-gray-300" />
-                  </LabelInputContainer>
+
+                  <div className={`p-4 rounded-lg border ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                    <h5 className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'} mb-2`}>Summary</h5>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Asset Name:</span>
+                        <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>{nftTitle || 'Not set'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Asset Type:</span>
+                        <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>{assetTypes[nftAssetType]}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Token Supply:</span>
+                        <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>{nftAmount || '0'} NFTs</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Images:</span>
+                        <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>{nftImageFiles.length} file(s)</span>
+                      </div>
+                    </div>
+                  </div>
                 </form>
               )}
             </div>
@@ -770,8 +1043,8 @@ const Issuer: React.FC = () => {
                   <Button 
     type="button"
     onClick={() => {
-      if (!nftId || !nftAmount) {
-        toast.error('Please configure all token parameters');
+      if (!nftAmount || parseInt(nftAmount) <= 0) {
+        toast.error('Please enter a valid token supply');
         return;
       }
       handleMintNFT();

@@ -29,13 +29,11 @@ import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { authApi, type RegisterData, type LoginData } from '@/api/authApi';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount, useDisconnect } from 'wagmi';
+import { useWallet } from '@/context/WalletContext';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { address, isConnected } = useAccount();
-  const { disconnect } = useDisconnect();
+  const { address, isConnected, connectWallet, disconnectWallet } = useWallet();
   
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
@@ -384,7 +382,23 @@ const Login: React.FC = () => {
                     Connect Wallet {!isLogin ? '' : '(Alternative Login)'}
                   </Label>
                   <div className="space-y-3">
-                    <ConnectButton />
+                    {!isConnected ? (
+                      <Button 
+                        onClick={connectWallet}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        <Wallet className="w-4 h-4 mr-2" />
+                        Connect Wallet
+                      </Button>
+                    ) : (
+                      <Button 
+                        onClick={disconnectWallet}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        Disconnect Wallet
+                      </Button>
+                    )}
                     {walletConnected && address && (
                       <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                         <div className="flex items-center text-green-700">
