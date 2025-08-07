@@ -211,3 +211,67 @@ export const getMarketplacePaused = async () => {
     return false;
   }
 };
+
+export const assignManager = async (managerAddress: string, tokenId: string, signer: ethers.Signer) => {
+  try {
+    const contractWithSigner = contract.connect(signer);
+    const tx = await contractWithSigner.assignManager(managerAddress, tokenId, {
+      gasLimit: 3000000
+    });
+    await tx.wait();
+    console.log('Manager assigned to token successfully:', tx.hash);
+    return tx;
+  } catch (error) {
+    console.error('Error assigning manager to token:', error);
+    throw error;
+  }
+};
+
+export const getManagerTokens = async (managerAddress: string) => {
+  try {
+    // First check if the function exists in the contract
+    if (!contract.getManagerTokens) {
+      console.log('getManagerTokens function not available in contract');
+      return [];
+    }
+
+    console.log(`Attempting to get tokens for manager: ${managerAddress}`);
+
+    // First check if manager exists to avoid contract reverts
+    try {
+      const managers = await getAllManagers();
+      const isValidManager = managers.addresses.includes(managerAddress);
+      console.log(`Manager ${managerAddress} is valid: ${isValidManager}`);
+      
+      if (!isValidManager) {
+        console.log(`Address ${managerAddress} is not a registered manager`);
+        return [];
+      }
+    } catch (managerCheckError) {
+      console.log('Could not verify manager status, proceeding with contract call:', managerCheckError);
+    }
+
+    // Try to call the contract function
+    const tokens = await contract.getManagerTokens(managerAddress);
+    console.log(`Raw contract response for manager ${managerAddress}:`, tokens);
+    
+    if (!tokens || tokens.length === 0) {
+      console.log(`Manager ${managerAddress} has no assigned tokens`);
+      return [];
+    }
+
+    const tokenStrings = tokens.map(token => token.toString());
+    console.log(`Manager ${managerAddress} has ${tokenStrings.length} assigned tokens:`, tokenStrings);
+    return tokenStrings;
+  } catch (error) {
+    console.error(`Error getting manager tokens for ${managerAddress}:`, error);
+    
+    // Check if it's a call revert exception
+    if (error.message && error.message.includes('call revert exception')) {
+      console.log(`Contract call reverted for manager ${managerAddress} - likely no tokens assigned or manager doesn't exist in contract`);
+    }
+    
+    // Return empty array if function fails - manager might have no tokens assigned yet
+    return [];
+  }
+};

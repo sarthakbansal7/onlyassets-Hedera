@@ -59,7 +59,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import * as authApi from '@/api/authApi';
 import { useWallet } from '@/context/WalletContext';
-import { getAllIssuers, getAllManagers, addIssuer, addManager, removeIssuer, removeManager, pauseMarketplace, getMarketplacePaused } from '@/services/contractService';
+import { getAllIssuers, getAllManagers, addIssuer, addManager, removeIssuer, removeManager, pauseMarketplace, getMarketplacePaused, assignManager, getManagerTokens } from '@/services/contractService';
 import { uploadJSONToIPFS, fetchIPFSContent } from '@/utils/ipfs';
 
 // Types for Admin Management
@@ -75,6 +75,7 @@ interface User {
   lastActive: string;
   tokensManaged?: number;
   totalVolume?: number;
+  assignedTokens?: string[];
 }
 
 interface SystemMetrics {
@@ -122,6 +123,7 @@ const Admin: React.FC = () => {
   const [showUserDetailsDialog, setShowUserDetailsDialog] = useState(false);
   const [showRemoveUserDialog, setShowRemoveUserDialog] = useState(false);
   const [showMarketplaceToggleDialog, setShowMarketplaceToggleDialog] = useState(false);
+  const [showAssignTokenDialog, setShowAssignTokenDialog] = useState(false);
   
   // Form states
   const [userForm, setUserForm] = useState({
@@ -138,6 +140,10 @@ const Admin: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [marketplacePaused, setMarketplacePaused] = useState(false);
+  const [assignTokenForm, setAssignTokenForm] = useState({
+    tokenId: '',
+    managerAddress: ''
+  });
 
   // Demo data initialization
   useEffect(() => {
@@ -223,6 +229,15 @@ const Admin: React.FC = () => {
       // Process managers
       for (const address of managersData.addresses) {
         const metadataURI = managersData.metadata[address];
+        
+        // Fetch assigned tokens for this manager
+        let assignedTokens: string[] = [];
+        try {
+          assignedTokens = await getManagerTokens(address);
+        } catch (error) {
+          console.log(`Error fetching tokens for manager ${address}:`, error);
+        }
+        
         let userData = {
           id: address,
           address: address,
@@ -233,8 +248,9 @@ const Admin: React.FC = () => {
           metadataURI: metadataURI,
           joinedDate: new Date().toISOString().split('T')[0],
           lastActive: new Date().toISOString().split('T')[0],
-          tokensManaged: 0,
-          totalVolume: 0
+          tokensManaged: assignedTokens.length,
+          totalVolume: 0,
+          assignedTokens: assignedTokens
         };
         
         // Try to fetch metadata from IPFS silently
@@ -494,6 +510,60 @@ const Admin: React.FC = () => {
 
   const handleMarketplaceToggleRequest = () => {
     setShowMarketplaceToggleDialog(true);
+  };
+
+  const handleAssignToken = async () => {
+    // Check wallet connection
+    if (!isConnected || !signer) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
+    if (!assignTokenForm.tokenId) {
+      toast.error('Please enter a token ID');
+      return;
+    }
+
+    // Validate token ID is a number
+    if (!/^\d+$/.test(assignTokenForm.tokenId)) {
+      toast.error('Token ID must be a valid number');
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      toast('Assigning token to manager...');
+      
+      const tx = await assignManager(assignTokenForm.managerAddress, assignTokenForm.tokenId, signer);
+      console.log('Assign manager transaction:', tx);
+      
+      toast.success('Token assigned to manager successfully!');
+      
+      // Wait a moment for the blockchain to update
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Refresh contract data to show the updated assignments
+      await loadContractData();
+      
+      setShowAssignTokenDialog(false);
+      setAssignTokenForm({ tokenId: '', managerAddress: '' });
+      
+    } catch (error: any) {
+      console.error('Error assigning token:', error);
+      if (error.message.includes('User denied')) {
+        toast.error('Transaction was cancelled by user');
+      } else {
+        toast.error(`Failed to assign token: ${error.message}`);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAssignTokenRequest = (manager: any) => {
+    setAssignTokenForm({ tokenId: '', managerAddress: manager.address });
+    setShowAssignTokenDialog(true);
   };
 
   const getStatusIcon = (status: string) => {
@@ -924,6 +994,11 @@ const Admin: React.FC = () => {
                           <p className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                             ${manager.totalVolume!.toLocaleString()} Monthly Income
                           </p>
+                          {manager.assignedTokens && manager.assignedTokens.length > 0 && (
+                            <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'} font-mono`}>
+                              Tokens: {manager.assignedTokens.join(', ')}
+                            </p>
+                          )}
                         </div>
                         
                         <div className="flex items-center space-x-2">
@@ -937,6 +1012,15 @@ const Admin: React.FC = () => {
                         </div>
                         
                         <div className="flex space-x-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            className="h-8 w-8 p-0 text-blue-600 border-blue-200 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-950"
+                            onClick={() => handleAssignTokenRequest(manager)}
+                            title="Assign Token"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </Button>
                           <Button 
                             variant="outline" 
                             size="sm"
@@ -1398,6 +1482,71 @@ const Admin: React.FC = () => {
                       Confirm Suspend Trading
                     </>
                   )}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Token Dialog */}
+      <Dialog open={showAssignTokenDialog} onOpenChange={setShowAssignTokenDialog}>
+        <DialogContent className={`sm:max-w-md ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} shadow-xl`}>
+          <DialogHeader className="space-y-3">
+            <DialogTitle className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+              Assign Token to Manager
+            </DialogTitle>
+            <DialogDescription className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+              Assign a specific token ID to this manager for asset management.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            <div className="space-y-4">
+              <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-slate-700/50' : 'bg-slate-50'} border ${isDarkMode ? 'border-slate-600' : 'border-slate-200'}`}>
+                <p className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>Manager Address:</p>
+                <p className={`text-xs font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-600'} mt-1`}>
+                  {assignTokenForm.managerAddress}
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="tokenId" className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
+                  Token ID
+                </Label>
+                <Input
+                  id="tokenId"
+                  type="number"
+                  placeholder="Enter token ID (e.g., 1, 2, 3...)"
+                  value={assignTokenForm.tokenId}
+                  onChange={(e) => setAssignTokenForm(prev => ({ ...prev, tokenId: e.target.value }))}
+                  className={`${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder:text-slate-400' : 'bg-white border-slate-300'}`}
+                />
+                <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Enter the numeric ID of the token you want to assign to this manager.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="space-x-2">
+            <Button variant="outline" onClick={() => setShowAssignTokenDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleAssignToken} 
+              disabled={isLoading || !assignTokenForm.tokenId || !isConnected}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isLoading ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Assigning...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Assign Token
                 </>
               )}
             </Button>
