@@ -129,9 +129,6 @@ const Login: React.FC = () => {
       if (!walletConnected || !formData.walletAddress) {
         return 'Please connect your wallet to complete registration';
       }
-      if (userPrimaryRole) {
-        return `This wallet is already registered as ${userPrimaryRole}. Please login instead.`;
-      }
       if (formData.password !== formData.confirmPassword) {
         return 'Passwords do not match';
       }
@@ -422,7 +419,7 @@ const Login: React.FC = () => {
                 </div>
               )}
 
-              {/* Role Selection - Show current role for login, fixed as 'user' for registration */}
+              {/* Role Selection - Show existing roles for registration */}
               {!isLogin && userPrimaryRole && (
                 <div className="mb-6">
                   <Label className="text-sm font-medium text-gray-700 mb-3 block">
@@ -432,11 +429,11 @@ const Login: React.FC = () => {
                     <div className="flex items-center text-blue-700">
                       <AlertCircle className="w-4 h-4 mr-2" />
                       <span className="text-sm font-medium">
-                        This wallet is already registered as: {userPrimaryRole.charAt(0).toUpperCase() + userPrimaryRole.slice(1)}
+                        This wallet already has roles: {availableRoles.join(', ')}
                       </span>
                     </div>
                     <p className="text-xs text-blue-600 mt-1">
-                      Please use the login option instead of creating a new account.
+                      You can add additional roles to this wallet or login with existing roles.
                     </p>
                   </div>
                 </div>
