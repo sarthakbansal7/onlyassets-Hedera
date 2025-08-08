@@ -82,7 +82,7 @@ const Marketplace: React.FC = () => {
           tokenId: result.tokenIds[i],
           name: metadata.name || `Asset ${result.tokenIds[i]}`,
           description: metadata.description || 'No description available',
-          image: metadata.image || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&h=600&fit=crop',
+          image: metadata.image || metadata.imageUrl || result.metadataURIs[i] || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&h=600&fit=crop',
           price: result.prices[i], // Price is already a string in Wei
           amount: result.amounts[i],
           seller: result.sellers[i],

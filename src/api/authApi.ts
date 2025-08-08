@@ -378,6 +378,23 @@ export const authApi = {
       console.error('Health check error:', error);
       throw error;
     }
+  },
+
+  // Ping backend to keep it alive
+  ping: async (): Promise<{ success: boolean; message: string }> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/ping`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      return await handleResponse(response);
+    } catch (error) {
+      console.error('Ping error:', error);
+      throw error;
+    }
   }
 };
 
@@ -398,7 +415,8 @@ export const {
   clearAuthData,
   getCurrentRole,
   getAvailableRoles,
-  healthCheck
+  healthCheck,
+  ping
 } = authApi;
 
 export default authApi;
