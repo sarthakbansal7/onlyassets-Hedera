@@ -53,6 +53,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { ethers } from 'ethers';
+import { fetchIPFSContent } from '@/utils/ipfs';
+import { getAllManagers, getManagerTokens } from '@/services/contractService';
 
 // Types for Asset Management
 interface AssignedAsset {
@@ -98,6 +101,12 @@ const ManagerDashboard: React.FC = () => {
   // Theme state
   const [isDarkMode, setIsDarkMode] = useState(false);
   
+  // Wallet states
+  const [walletConnected, setWalletConnected] = useState(false);
+  const [walletAddress, setWalletAddress] = useState('');
+  const [isAuthorizedManager, setIsAuthorizedManager] = useState(false);
+  const [loading, setLoading] = useState(false);
+  
   // Main state
   const [assignedAssets, setAssignedAssets] = useState<AssignedAsset[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<AssignedAsset | null>(null);
@@ -127,8 +136,142 @@ const ManagerDashboard: React.FC = () => {
 
   // Demo data initialization
   useEffect(() => {
-    loadDemoData();
+    checkWalletConnection();
   }, []);
+
+  // Connect wallet function
+  const connectWallet = async () => {
+    try {
+      if (!window.ethereum) {
+        toast.error('MetaMask not found! Please install MetaMask.');
+        return;
+      }
+
+      setLoading(true);
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      const signer = provider.getSigner();
+      const address = await signer.getAddress();
+      
+      setWalletAddress(address);
+      setWalletConnected(true);
+      toast.success('Wallet connected successfully!');
+      
+      // Check if user is authorized manager
+      await checkManagerAuthorization(address);
+      
+    } catch (error: any) {
+      console.error('Wallet connection failed:', error);
+      toast.error(`Failed to connect wallet: ${error.message || 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Check wallet connection on mount
+  const checkWalletConnection = async () => {
+    if (window.ethereum) {
+      try {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const accounts = await provider.listAccounts();
+        if (accounts.length > 0) {
+          setWalletAddress(accounts[0]);
+          setWalletConnected(true);
+          await checkManagerAuthorization(accounts[0]);
+        }
+      } catch (error) {
+        console.log('No wallet connected');
+        loadDemoData(); // Load demo data if no wallet connected
+      }
+    } else {
+      loadDemoData(); // Load demo data if no MetaMask
+    }
+  };
+
+  // Check if wallet is authorized manager
+  const checkManagerAuthorization = async (address: string) => {
+    try {
+      console.log('🔄 Checking manager authorization for:', address);
+      
+      // Use contractService to get all managers
+      const managersData = await getAllManagers();
+      console.log('✅ All managers from contract:', managersData);
+      
+      // Check if current address is an authorized manager
+      const isManager = managersData.addresses.map((addr: string) => addr.toLowerCase()).includes(address.toLowerCase());
+      setIsAuthorizedManager(isManager);
+      
+      if (isManager) {
+        console.log('✅ User is authorized manager');
+        toast.success('Manager authorization confirmed!');
+        
+        // Get manager's assigned tokens
+        await fetchManagerAssets(address);
+      } else {
+        console.log('❌ User is not an authorized manager');
+        toast.error('Access denied: You are not an authorized manager');
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Failed to check manager authorization:', error);
+      toast.error('Failed to verify manager status');
+      // Load demo data on error
+      loadDemoData();
+    }
+  };
+
+  // Fetch manager's assigned assets
+  const fetchManagerAssets = async (managerAddress: string) => {
+    try {
+      setLoading(true);
+      console.log('🔄 Fetching manager assets for:', managerAddress);
+      
+      // Use contractService to get manager's token IDs
+      const managerTokenIds = await getManagerTokens(managerAddress);
+      console.log('✅ Manager token IDs:', managerTokenIds);
+      
+      if (managerTokenIds.length === 0) {
+        console.log('ℹ️ No assets assigned to manager');
+        setAssignedAssets([]);
+        setTotalManaged(0);
+        setTotalIncome(0);
+        return;
+      }
+      
+      console.log('✅ Token ID strings:', managerTokenIds);
+      
+      // For now, create demo assets based on assigned token IDs
+      // In production, you would fetch actual asset data from marketplace/IPFS
+      const managedAssets: AssignedAsset[] = managerTokenIds.map((tokenId: string, index: number) => ({
+        tokenId,
+        name: `Asset #${tokenId}`,
+        type: 'real-estate' as const,
+        location: `Location ${index + 1}`,
+        totalTokens: 1000,
+        soldTokens: Math.floor(Math.random() * 800) + 200,
+        currentValue: Math.floor(Math.random() * 2000000) + 500000,
+        monthlyIncome: Math.floor(Math.random() * 15000) + 5000,
+        occupancyRate: Math.floor(Math.random() * 20) + 80,
+        lastInspection: "2024-11-15",
+        nextPayment: "2025-01-01",
+        status: 'active' as const,
+        metadataURI: `ipfs://QmExample${tokenId}`,
+        images: ["/api/placeholder/400/300"]
+      }));
+      
+      setAssignedAssets(managedAssets);
+      setTotalManaged(managedAssets.length);
+      setTotalIncome(managedAssets.reduce((sum, asset) => sum + asset.monthlyIncome, 0));
+      
+      
+    } catch (error: any) {
+      console.error('❌ Failed to fetch manager assets:', error);
+      toast.error('Failed to load assigned assets');
+      loadDemoData();
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadDemoData = () => {
     const demoAssets: AssignedAsset[] = [
@@ -297,6 +440,39 @@ const ManagerDashboard: React.FC = () => {
             </div>
             
             <div className="flex items-center space-x-4">
+              {/* Wallet Connection */}
+              {!walletConnected ? (
+                <Button 
+                  onClick={connectWallet}
+                  disabled={loading}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <Wallet className="w-4 h-4 mr-2" />
+                  {loading ? 'Connecting...' : 'Connect Wallet'}
+                </Button>
+              ) : (
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-2 bg-green-500/10 px-3 py-2 rounded-lg border border-green-500/20">
+                    <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                    <span className="text-green-400 text-sm font-medium">
+                      {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+                    </span>
+                  </div>
+                  
+                  {isAuthorizedManager ? (
+                    <div className="flex items-center space-x-2 bg-emerald-500/10 px-3 py-2 rounded-lg border border-emerald-500/20">
+                      <CheckCircle className="w-4 h-4 text-emerald-400" />
+                      <span className="text-emerald-400 text-sm font-medium">Authorized Manager</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2 bg-red-500/10 px-3 py-2 rounded-lg border border-red-500/20">
+                      <AlertCircle className="w-4 h-4 text-red-400" />
+                      <span className="text-red-400 text-sm font-medium">Not Authorized</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              
               <div className="flex items-center space-x-2">
                 <div className="flex items-center space-x-2 bg-emerald-500/10 px-3 py-2 rounded-lg border border-emerald-500/20">
                   <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
@@ -334,7 +510,62 @@ const ManagerDashboard: React.FC = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        {!walletConnected ? (
+          /* Wallet Connection Required */
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <Card className={`max-w-md w-full ${isDarkMode ? 'bg-gray-900/50 border-gray-800' : 'bg-white border-gray-200'}`}>
+              <CardContent className="p-8 text-center">
+                <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Wallet className="w-8 h-8 text-blue-500" />
+                </div>
+                <h2 className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  Connect Your Wallet
+                </h2>
+                <p className={`text-sm mb-6 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Connect your wallet to access the Asset Manager Dashboard and manage your assigned properties.
+                </p>
+                <Button 
+                  onClick={connectWallet}
+                  disabled={loading}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <Wallet className="w-4 h-4 mr-2" />
+                  {loading ? 'Connecting...' : 'Connect Wallet'}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        ) : !isAuthorizedManager ? (
+          /* Not Authorized */
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <Card className={`max-w-md w-full ${isDarkMode ? 'bg-gray-900/50 border-gray-800' : 'bg-white border-gray-200'}`}>
+              <CardContent className="p-8 text-center">
+                <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Shield className="w-8 h-8 text-red-500" />
+                </div>
+                <h2 className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  Access Restricted
+                </h2>
+                <p className={`text-sm mb-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Your wallet address is not authorized to access the Asset Manager Dashboard.
+                </p>
+                <p className={`text-xs mb-6 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                  Connected: {walletAddress.slice(0, 10)}...{walletAddress.slice(-8)}
+                </p>
+                <Button 
+                  onClick={() => window.location.href = '/'}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Home className="w-4 h-4 mr-2" />
+                  Return to Home
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+          /* Authorized Manager Dashboard */
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className={`grid w-full grid-cols-4 ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-gray-100 border-gray-200'}`}>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="assets">My Assets</TabsTrigger>
@@ -351,7 +582,9 @@ const ManagerDashboard: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Assets Managed</p>
-                      <p className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{totalManaged}</p>
+                      <p className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                        {walletConnected && isAuthorizedManager ? totalManaged : 'N/A'}
+                      </p>
                     </div>
                     <div className="p-3 bg-blue-500/10 rounded-lg">
                       <Building2 className="w-6 h-6 text-blue-500" />
@@ -359,7 +592,9 @@ const ManagerDashboard: React.FC = () => {
                   </div>
                   <div className="mt-4 flex items-center">
                     <ArrowUpRight className="w-4 h-4 text-green-500 mr-1" />
-                    <span className="text-sm text-green-500">+12% from last month</span>
+                    <span className="text-sm text-green-500">
+                      {walletConnected ? 'Real-time data' : 'Connect wallet to view'}
+                    </span>
                   </div>
                 </CardContent>
               </Card>
@@ -369,7 +604,9 @@ const ManagerDashboard: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Monthly Income</p>
-                      <p className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>${totalIncome.toLocaleString()}</p>
+                      <p className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                        {walletConnected && isAuthorizedManager ? `$${totalIncome.toLocaleString()}` : 'N/A'}
+                      </p>
                     </div>
                     <div className="p-3 bg-emerald-500/10 rounded-lg">
                       <DollarSign className="w-6 h-6 text-emerald-500" />
@@ -377,7 +614,9 @@ const ManagerDashboard: React.FC = () => {
                   </div>
                   <div className="mt-4 flex items-center">
                     <ArrowUpRight className="w-4 h-4 text-green-500 mr-1" />
-                    <span className="text-sm text-green-500">+8.5% from last month</span>
+                    <span className="text-sm text-green-500">
+                      {walletConnected ? 'From assigned assets' : 'Connect wallet to view'}
+                    </span>
                   </div>
                 </CardContent>
               </Card>
@@ -387,7 +626,12 @@ const ManagerDashboard: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Avg Occupancy</p>
-                      <p className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>91%</p>
+                      <p className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                        {walletConnected && isAuthorizedManager && assignedAssets.length > 0 
+                          ? `${Math.round(assignedAssets.reduce((sum, asset) => sum + asset.occupancyRate, 0) / assignedAssets.length)}%`
+                          : 'N/A'
+                        }
+                      </p>
                     </div>
                     <div className="p-3 bg-purple-500/10 rounded-lg">
                       <PieChart className="w-6 h-6 text-purple-500" />
@@ -405,7 +649,12 @@ const ManagerDashboard: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Value</p>
-                      <p className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>$5.5M</p>
+                      <p className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                        {walletConnected && isAuthorizedManager 
+                          ? `$${(assignedAssets.reduce((sum, asset) => sum + asset.currentValue, 0) / 1000000).toFixed(1)}M`
+                          : 'N/A'
+                        }
+                      </p>
                     </div>
                     <div className="p-3 bg-orange-500/10 rounded-lg">
                       <TrendingUp className="w-6 h-6 text-orange-500" />
@@ -502,6 +751,15 @@ const ManagerDashboard: React.FC = () => {
             <div className="flex justify-between items-center">
               <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>My Assigned Assets</h2>
               <div className="flex space-x-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => walletConnected && fetchManagerAssets(walletAddress)}
+                  disabled={loading || !walletConnected}
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  {loading ? 'Loading...' : 'Refresh'}
+                </Button>
                 <Button variant="outline" size="sm">
                   <Filter className="w-4 h-4 mr-2" />
                   Filter
@@ -514,7 +772,37 @@ const ManagerDashboard: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {assignedAssets.map((asset) => {
+              {assignedAssets.length === 0 ? (
+                <div className="col-span-full">
+                  <Card className={`${isDarkMode ? 'bg-gray-900/50 border-gray-800' : 'bg-white border-gray-200'}`}>
+                    <CardContent className="p-12 text-center">
+                      <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Building2 className="w-8 h-8 text-blue-500" />
+                      </div>
+                      <h3 className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                        No Assets Assigned
+                      </h3>
+                      <p className={`text-sm mb-6 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                        {walletConnected ? 
+                          'You currently have no assets assigned to manage. Contact the admin to get assets assigned.' :
+                          'Connect your wallet to view assigned assets.'
+                        }
+                      </p>
+                      {walletConnected && (
+                        <Button 
+                          onClick={() => fetchManagerAssets(walletAddress)}
+                          disabled={loading}
+                          variant="outline"
+                        >
+                          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                          {loading ? 'Checking...' : 'Check Again'}
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : (
+                assignedAssets.map((asset) => {
                 const IconComponent = getTypeIcon(asset.type);
                 return (
                   <Card key={asset.tokenId} className={`${isDarkMode ? 'bg-gray-900/50 border-gray-800' : 'bg-white border-gray-200'} cursor-pointer hover:shadow-lg transition-shadow`}
@@ -595,7 +883,8 @@ const ManagerDashboard: React.FC = () => {
                     </CardContent>
                   </Card>
                 );
-              })}
+              })
+              )}
             </div>
           </TabsContent>
 
@@ -769,6 +1058,7 @@ const ManagerDashboard: React.FC = () => {
             </div>
           </TabsContent>
         </Tabs>
+        )}
       </main>
 
       {/* Submit Rental Income Dialog */}
