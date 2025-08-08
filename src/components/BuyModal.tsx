@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'react-hot-toast';
 import { ethers } from 'ethers';
 import MarketplaceService from '@/services/marketplaceService';
+import { formatPriceInUSD } from '@/utils/priceService';
 
 interface BuyModalProps {
   asset: {
@@ -18,9 +19,10 @@ interface BuyModalProps {
   };
   onClose: () => void;
   onSuccess?: () => void;
+  hbarPrice: number;
 }
 
-const BuyModal: React.FC<BuyModalProps> = ({ asset, onClose, onSuccess }) => {
+const BuyModal: React.FC<BuyModalProps> = ({ asset, onClose, onSuccess, hbarPrice }) => {
   const [quantity, setQuantity] = useState(1);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -51,7 +53,7 @@ const BuyModal: React.FC<BuyModalProps> = ({ asset, onClose, onSuccess }) => {
       const signer = provider.getSigner();
 
       // Contract address and simple ABI
-      const contractAddress = "0x2B3E871aA2ea7277afbA7dF458ab17Aed3c3BD1B";
+      const contractAddress = "0x262111cfF6a9Fb77Ab3221497b5a681922Ec8279";
       const abi = [
         "function buyAsset(string _tokenId, uint256 _amount) external payable",
         "function getListing(string _tokenId) external view returns (address seller, uint256 amount, uint256 price, string metadataURI, bool active)"
@@ -101,8 +103,8 @@ const BuyModal: React.FC<BuyModalProps> = ({ asset, onClose, onSuccess }) => {
     }
   };
 
-  // Calculate total cost in HBAR for UI display (asset.price comes in Wei format from contract)
-  const pricePerTokenHBAR = parseFloat(asset.price) / Math.pow(10, 18); // Convert Wei to HBAR for display
+  // Calculate total cost in HBAR for UI display (asset.price comes in tinybar format 10^8)
+  const pricePerTokenHBAR = parseFloat(asset.price) / Math.pow(10, 8); // Convert tinybar to HBAR for display
   const totalCostHBAR = pricePerTokenHBAR * quantity;
 
   return (
@@ -148,7 +150,10 @@ const BuyModal: React.FC<BuyModalProps> = ({ asset, onClose, onSuccess }) => {
               <div className="bg-gray-50 rounded-xl p-4 border border-gray-200/50 mb-4">
                 <div className="text-gray-600 text-sm font-medium">Price per Token</div>
                 <div className="text-2xl font-bold text-gray-900 mt-1">
-                  {pricePerTokenHBAR.toFixed(4)} HBAR
+                  {formatPriceInUSD(pricePerTokenHBAR, hbarPrice)}
+                </div>
+                <div className="text-sm text-gray-500 mt-1">
+                  {pricePerTokenHBAR.toFixed(4)} HBAR each
                 </div>
               </div>
             </div>
@@ -190,12 +195,17 @@ const BuyModal: React.FC<BuyModalProps> = ({ asset, onClose, onSuccess }) => {
             <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-200/50">
               <div className="flex justify-between items-center">
                 <span className="text-gray-700 font-medium">Total Cost:</span>
-                <span className="text-2xl font-bold text-gray-900">
-                  {totalCostHBAR.toFixed(4)} HBAR
-                </span>
+                <div className="text-right">
+                  <span className="text-2xl font-bold text-gray-900 block">
+                    {formatPriceInUSD(totalCostHBAR, hbarPrice)}
+                  </span>
+                  <span className="text-sm text-gray-600">
+                    {totalCostHBAR.toFixed(4)} HBAR
+                  </span>
+                </div>
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                {quantity} token{quantity > 1 ? 's' : ''} × {pricePerTokenHBAR.toFixed(4)} HBAR each
+                {quantity} token{quantity > 1 ? 's' : ''} × {formatPriceInUSD(pricePerTokenHBAR, hbarPrice)} each
               </div>
             </div>
 

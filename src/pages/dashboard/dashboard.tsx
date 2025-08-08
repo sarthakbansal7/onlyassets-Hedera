@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart3, 
@@ -39,65 +39,43 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { ethers } from 'ethers';
+import { toast } from 'react-hot-toast';
+import MarketplaceService from '@/services/marketplaceService';
+import { fetchIPFSContent } from '@/utils/ipfs';
 
-// Mock data for demo
-const MOCK_PORTFOLIO_DATA = {
-  totalInvestment: 248500,
-  currentValue: 267300,
-  totalReturn: 18800,
-  returnPercentage: 7.56,
-  monthlyIncome: 3250,
-  totalAssets: 12,
-  activeInvestments: 8
-};
+// Real data interfaces
+interface UserAsset {
+  tokenId: string;
+  name: string;
+  description: string;
+  image: string;
+  price: string; // in Wei
+  amount: number;
+  seller: string;
+  metadataURI: string;
+  metadata?: any;
+  attributes: Array<{
+    trait_type: string;
+    value: string;
+  }>;
+  type: string;
+}
 
-const MOCK_OWNED_ASSETS = [
-  {
-    id: 1,
-    name: "Manhattan Luxury Apartment",
-    type: "Real Estate",
-    invested: 125000,
-    currentValue: 132000,
-    monthlyIncome: 1850,
-    tokens: 250,
-    icon: Building,
-    performance: 5.6
-  },
-  {
-    id: 2,
-    name: "Tech Startup Invoice #1847",
-    type: "Invoice",
-    invested: 8500,
-    currentValue: 8925,
-    monthlyIncome: 425,
-    tokens: 85,
-    icon: FileText,
-    performance: 5.0
-  },
-  {
-    id: 3,
-    name: "Gold Bullion Reserve",
-    type: "Commodity",
-    invested: 45000,
-    currentValue: 47250,
-    monthlyIncome: 0,
-    tokens: 90,
-    icon: Coins,
-    performance: 5.0
-  },
-  {
-    id: 4,
-    name: "Carbon Credit Portfolio",
-    type: "Carbon Credit",
-    invested: 15000,
-    currentValue: 15750,
-    monthlyIncome: 315,
-    tokens: 150,
-    icon: Leaf,
-    performance: 5.0
-  }
-];
+interface PortfolioData {
+  totalInvestment: number;
+  currentValue: number;
+  totalReturn: number;
+  returnPercentage: number;
+  monthlyIncome: number;
+  totalAssets: number;
+  activeInvestments: number;
+}
 
+// Mock data for sections not yet converted to real data
 const MOCK_INCOME_HISTORY = [
   { date: "2024-03-01", asset: "Manhattan Luxury Apartment", amount: 1850, type: "Rental" },
   { date: "2024-03-01", asset: "Tech Startup Invoice #1847", amount: 425, type: "Interest" },
@@ -206,6 +184,381 @@ const Dashboard: React.FC = () => {
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  
+  // Wallet and asset states
+  const [walletConnected, setWalletConnected] = useState(false);
+  const [walletAddress, setWalletAddress] = useState('');
+  const [userAssets, setUserAssets] = useState<UserAsset[]>([]);
+  const [portfolioData, setPortfolioData] = useState<PortfolioData>({
+    totalInvestment: 0,
+    currentValue: 0,
+    totalReturn: 0,
+    returnPercentage: 0,
+    monthlyIncome: 0,
+    totalAssets: 0,
+    activeInvestments: 0
+  });
+  const [loading, setLoading] = useState(false);
+
+  // Sell modal states
+  const [sellModalOpen, setSellModalOpen] = useState(false);
+  const [selectedAsset, setSelectedAsset] = useState<UserAsset | null>(null);
+  const [sellAmount, setSellAmount] = useState('');
+  const [sellLoading, setSellLoading] = useState(false);
+
+  // Connect wallet function
+  const connectWallet = async () => {
+    try {
+      if (!window.ethereum) {
+        toast.error('MetaMask not found! Please install MetaMask.');
+        return;
+      }
+
+      setLoading(true);
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      const signer = provider.getSigner();
+      const address = await signer.getAddress();
+      
+      setWalletAddress(address);
+      setWalletConnected(true);
+      toast.success('Wallet connected successfully!');
+      
+      // Fetch user assets after connecting
+      await fetchUserAssets(address);
+      
+    } catch (error: any) {
+      console.error('Wallet connection failed:', error);
+      toast.error(`Failed to connect wallet: ${error.message || 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch user assets from marketplace
+  const fetchUserAssets = async (userAddress: string) => {
+    try {
+      setLoading(true);
+      
+      console.log('🔄 Fetching user assets for:', userAddress);
+      
+      // Check if we have MetaMask connected for user-specific calls
+      if (!window.ethereum) {
+        throw new Error('MetaMask not found');
+      }
+      
+      // Create provider with user's wallet for getMyAssets call
+      const userProvider = new ethers.providers.Web3Provider(window.ethereum);
+      const userSigner = userProvider.getSigner();
+      
+      // Create read-only provider for getAllListings
+      const readOnlyProvider = new ethers.providers.JsonRpcProvider('https://testnet.hashio.io/api');
+      
+      // Contract address and ABIs
+      const contractAddress = "0x262111cfF6a9Fb77Ab3221497b5a681922Ec8279";
+      const getAllListingsAbi = [
+        "function getAllListings() external view returns (string[] memory tokenIds, address[] memory sellers, uint256[] memory amounts, uint256[] memory prices, string[] memory metadataURIs)"
+      ];
+      const getMyAssetsAbi = [
+        "function getMyAssets() external view returns (string[] memory tokenIds, uint256[] memory amounts)"
+      ];
+      
+      // Create contract instances
+      const readOnlyContract = new ethers.Contract(contractAddress, getAllListingsAbi, readOnlyProvider);
+      const userContract = new ethers.Contract(contractAddress, getMyAssetsAbi, userSigner);
+      
+      // Get user's owned assets and all listings in parallel
+      const [userAssetsResult, allListingsResult] = await Promise.all([
+        userContract.getMyAssets(),
+        readOnlyContract.getAllListings()
+      ]);
+      
+      // Process user's owned assets
+      const [userTokenIds, userBalances] = userAssetsResult;
+      const userOwnedAssets = userTokenIds.map((tokenId: string, index: number) => ({
+        tokenId,
+        balance: parseInt(userBalances[index].toString())
+      }));
+
+      console.log('✅ User owned assets from blockchain:', userOwnedAssets);
+
+      if (userOwnedAssets.length === 0) {
+        console.log('ℹ️ No assets found for user');
+        setUserAssets([]);
+        calculatePortfolioData([]);
+        toast.success('No assets found in your wallet');
+        return;
+      }
+
+      // Process all listings
+      const [listingTokenIds, sellers, amounts, prices, metadataURIs] = allListingsResult;
+      const allListings = listingTokenIds.map((tokenId: string, index: number) => ({
+        tokenId,
+        seller: sellers[index],
+        amount: parseInt(amounts[index].toString()),
+        price: prices[index].toString(),
+        metadataURI: metadataURIs[index]
+      }));
+
+      console.log('✅ All marketplace listings:', allListings);
+
+      // Create a map of tokenId to listing data for quick lookup
+      const listingMap = new Map();
+      allListings.forEach(listing => {
+        listingMap.set(listing.tokenId, listing);
+      });
+
+      // Enrich user assets with marketplace data and IPFS metadata
+      const enrichedAssets: UserAsset[] = [];
+      
+      for (const ownedAsset of userOwnedAssets) {
+        const listing = listingMap.get(ownedAsset.tokenId);
+        let metadata = null;
+        let assetType = 'Unknown';
+        
+        // Default asset data
+        let assetData = {
+          tokenId: ownedAsset.tokenId,
+          name: `Asset #${ownedAsset.tokenId}`,
+          description: 'Tokenized Real World Asset',
+          image: '',
+          price: listing?.price || '0',
+          amount: ownedAsset.balance, // Use actual balance from blockchain
+          seller: listing?.seller || '',
+          metadataURI: listing?.metadataURI || '',
+          metadata: null,
+          attributes: [] as Array<{ trait_type: string; value: string }>,
+          type: 'Unknown'
+        };
+
+        // Fetch metadata from IPFS if available
+        if (listing?.metadataURI && listing.metadataURI !== '' && listing.metadataURI !== 'undefined') {
+          try {
+            console.log(`🔄 Fetching metadata for asset ${ownedAsset.tokenId} from IPFS: ${listing.metadataURI}`);
+            metadata = await fetchIPFSContent(listing.metadataURI);
+            
+            if (metadata) {
+              console.log(`✅ Successfully loaded metadata for asset ${ownedAsset.tokenId}:`, metadata);
+              
+              // Update asset data with metadata
+              assetData.name = metadata.name || assetData.name;
+              assetData.description = metadata.description || assetData.description;
+              assetData.image = metadata.image || '';
+              assetData.metadata = metadata;
+              assetData.attributes = metadata.attributes || [];
+              assetData.type = metadata.properties?.assetType || 
+                               metadata.asset_type || 
+                               metadata.type || 
+                               'Real Estate';
+            } else {
+              console.log(`⚠️ No valid metadata found for asset ${ownedAsset.tokenId}`);
+            }
+          } catch (error) {
+            console.log(`⚠️ Failed to fetch metadata for asset ${ownedAsset.tokenId}:`, error);
+          }
+        } else {
+          console.log(`ℹ️ No metadata URI for asset ${ownedAsset.tokenId}`);
+        }
+        
+        enrichedAssets.push(assetData);
+      }
+
+      console.log('✅ Final enriched user assets:', enrichedAssets);
+      setUserAssets(enrichedAssets);
+      
+      // Calculate portfolio data
+      calculatePortfolioData(enrichedAssets);
+      
+      
+
+    } catch (error) {
+      console.error('❌ Failed to fetch user assets:', error);
+      
+      // Show demo data if contract call fails
+      const demoAssets: UserAsset[] = [
+        {
+          tokenId: 'DEMO_001',
+          name: 'Demo Real Estate Asset',
+          description: 'This is a demo asset showing how your portfolio would look',
+          image: '',
+          price: '30000000', // 0.3 HBAR in tinybar (8 decimals)
+          amount: 5,
+          seller: userAddress,
+          metadataURI: '',
+          metadata: null,
+          attributes: [],
+          type: 'Real Estate'
+        },
+        {
+          tokenId: 'DEMO_002', 
+          name: 'Demo Invoice Asset',
+          description: 'Another demo asset for portfolio display',
+          image: '',
+          price: '15000000', // 0.15 HBAR in tinybar (8 decimals)
+          amount: 3,
+          seller: userAddress,
+          metadataURI: '',
+          metadata: null,
+          attributes: [],
+          type: 'Invoice'
+        }
+      ];
+      
+      setUserAssets(demoAssets);
+      calculatePortfolioData(demoAssets);
+      
+      toast.error('Failed to fetch blockchain data. Showing demo data.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Calculate portfolio analytics
+  const calculatePortfolioData = (assets: UserAsset[]) => {
+    if (assets.length === 0) {
+      setPortfolioData({
+        totalInvestment: 0,
+        currentValue: 0,
+        totalReturn: 0,
+        returnPercentage: 0,
+        monthlyIncome: 0,
+        totalAssets: 0,
+        activeInvestments: 0
+      });
+      return;
+    }
+
+    // Calculate total value by summing (amount * price) for all assets
+    // Price is in tinybar (8 decimals), convert to HBAR by dividing by 10^8
+    const totalValueHBAR = assets.reduce((sum, asset) => {
+      const pricePerTokenHBAR = parseFloat(asset.price) / Math.pow(10, 8); // Convert tinybar to HBAR (8 decimals)
+      const assetTotalValue = pricePerTokenHBAR * asset.amount;
+      console.log(`Asset ${asset.tokenId}: ${asset.amount} tokens × ${pricePerTokenHBAR.toFixed(6)} HBAR = ${assetTotalValue.toFixed(6)} HBAR`);
+      return sum + assetTotalValue;
+    }, 0);
+
+    console.log(`Total portfolio value: ${totalValueHBAR.toFixed(6)} HBAR`);
+
+    // Use total value as current investment (real portfolio value)
+    const totalInvestment = totalValueHBAR;
+    const currentValue = totalValueHBAR;
+    
+    // For now, assume no gains/losses (can be updated later with historical data)
+    const totalReturn = 0;
+    const returnPercentage = 0;
+    
+    // Monthly income = 10% of total investment per year / 12 months
+    const monthlyIncome = (totalInvestment * 0.10) / 12;
+
+    console.log(`Monthly income calculation: (${totalInvestment.toFixed(6)} HBAR × 0.10) / 12 = ${monthlyIncome.toFixed(6)} HBAR`);
+
+    setPortfolioData({
+      totalInvestment,
+      currentValue,
+      totalReturn,
+      returnPercentage,
+      monthlyIncome,
+      totalAssets: assets.length,
+      activeInvestments: assets.filter(asset => parseFloat(asset.price) > 0).length
+    });
+  };
+
+  // Sell asset function
+  const sellAsset = async () => {
+    if (!selectedAsset || !sellAmount || !walletConnected) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+
+    const amount = parseInt(sellAmount);
+    if (amount <= 0 || amount > selectedAsset.amount) {
+      toast.error(`Amount must be between 1 and ${selectedAsset.amount}`);
+      return;
+    }
+
+    try {
+      setSellLoading(true);
+      
+      console.log(`🔄 Selling ${amount} tokens of asset ${selectedAsset.tokenId}`);
+      
+      if (!window.ethereum) {
+        throw new Error('MetaMask not found');
+      }
+
+      // Create provider with user's wallet
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      
+      // Contract address and ABI
+      const contractAddress = "0x262111cfF6a9Fb77Ab3221497b5a681922Ec8279";
+      const sellAssetAbi = [
+        "function sellAsset(string memory _tokenId, uint256 _amount) external"
+      ];
+      
+      // Create contract instance
+      const contract = new ethers.Contract(contractAddress, sellAssetAbi, signer);
+      
+      console.log(`📞 Calling sellAsset("${selectedAsset.tokenId}", ${amount})`);
+      
+      // Call sellAsset function
+      const tx = await contract.sellAsset(selectedAsset.tokenId, amount);
+      
+      console.log('🔄 Transaction sent:', tx.hash);
+      toast.success('Sell transaction sent! Waiting for confirmation...');
+      
+      // Wait for transaction confirmation
+      const receipt = await tx.wait();
+      console.log('✅ Transaction confirmed:', receipt);
+      
+      // Calculate HBAR received
+      const pricePerToken = parseFloat(selectedAsset.price) / Math.pow(10, 8);
+      const totalHBAR = pricePerToken * amount;
+      
+      toast.success(`Successfully sold ${amount} tokens for ${totalHBAR.toFixed(4)} HBAR!`);
+      
+      // Close modal and reset
+      setSellModalOpen(false);
+      setSelectedAsset(null);
+      setSellAmount('');
+      
+      // Refresh user assets
+      await fetchUserAssets(walletAddress);
+      
+    } catch (error: any) {
+      console.error('❌ Failed to sell asset:', error);
+      toast.error(`Failed to sell asset: ${error.message || 'Unknown error'}`);
+    } finally {
+      setSellLoading(false);
+    }
+  };
+
+  // Open sell modal
+  const openSellModal = (asset: UserAsset) => {
+    setSelectedAsset(asset);
+    setSellAmount('');
+    setSellModalOpen(true);
+  };
+
+  // Check wallet connection on mount
+  useEffect(() => {
+    const checkWalletConnection = async () => {
+      if (window.ethereum) {
+        try {
+          const provider = new ethers.providers.Web3Provider(window.ethereum);
+          const accounts = await provider.listAccounts();
+          if (accounts.length > 0) {
+            setWalletAddress(accounts[0]);
+            setWalletConnected(true);
+            await fetchUserAssets(accounts[0]);
+          }
+        } catch (error) {
+          console.log('No wallet connected');
+        }
+      }
+    };
+
+    checkWalletConnection();
+  }, []);
 
   // Simple chart placeholder component matching marketplace theme
   const SimpleChart: React.FC<{ type: 'line' | 'doughnut' }> = ({ type }) => (
@@ -255,7 +608,7 @@ const Dashboard: React.FC = () => {
                       <p className="text-xs md:text-sm font-medium text-gray-600 mb-2">TOTAL INVESTMENT</p>
                       <div className="flex items-center space-x-2 mb-2">
                         <p className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-gray-900">
-                          {balanceVisible ? `$${MOCK_PORTFOLIO_DATA.totalInvestment.toLocaleString()}` : '••••••'}
+                          {balanceVisible ? `${portfolioData.totalInvestment.toFixed(4)} HBAR` : '••••••'}
                         </p>
                         <Button
                           variant="ghost"
@@ -266,7 +619,9 @@ const Dashboard: React.FC = () => {
                           {balanceVisible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                         </Button>
                       </div>
-                      <p className="text-green-600 text-xs md:text-sm">+2.4% from last month</p>
+                      <p className="text-green-600 text-xs md:text-sm">
+                        {walletConnected ? '+2.4% from last month' : 'Connect wallet to view'}
+                      </p>
                     </div>
                     <div className="p-1.5 md:p-2 bg-gray-100 rounded-lg flex-shrink-0">
                       <TrendingUp className="w-4 md:w-5 h-4 md:h-5 text-gray-600" />
@@ -281,9 +636,11 @@ const Dashboard: React.FC = () => {
                     <div className="flex-1 min-w-0 pr-2">
                       <p className="text-xs md:text-sm font-medium text-gray-600 mb-2">CURRENT VALUE</p>
                       <p className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-gray-900 mb-2">
-                        {balanceVisible ? `$${MOCK_PORTFOLIO_DATA.currentValue.toLocaleString()}` : '••••••'}
+                        {balanceVisible ? `${portfolioData.currentValue.toFixed(4)} HBAR` : '••••••'}
                       </p>
-                      <p className="text-green-600 text-xs md:text-sm">+7.56% total return</p>
+                      <p className="text-green-600 text-xs md:text-sm">
+                        +{portfolioData.returnPercentage.toFixed(2)}% total return
+                      </p>
                     </div>
                     <div className="p-1.5 md:p-2 bg-gray-100 rounded-lg flex-shrink-0">
                       <ArrowUpRight className="w-4 md:w-5 h-4 md:h-5 text-gray-600" />
@@ -299,10 +656,10 @@ const Dashboard: React.FC = () => {
                       <p className="text-xs md:text-sm font-medium text-gray-600 mb-2">TOTAL RETURN</p>
                       <div className="flex flex-col space-y-1 mb-2">
                         <p className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-gray-900">
-                          {balanceVisible ? `$${MOCK_PORTFOLIO_DATA.totalReturn.toLocaleString()}` : '••••••'}
+                          {balanceVisible ? `${portfolioData.totalReturn.toFixed(4)} HBAR` : '••••••'}
                         </p>
                         <Badge variant="secondary" className="bg-green-100 text-green-800 text-xs w-fit">
-                          +{MOCK_PORTFOLIO_DATA.returnPercentage}%
+                          +{portfolioData.returnPercentage.toFixed(2)}%
                         </Badge>
                       </div>
                       <p className="text-green-600 text-xs md:text-sm">Above market average</p>
@@ -320,7 +677,7 @@ const Dashboard: React.FC = () => {
                     <div className="flex-1 min-w-0 pr-2">
                       <p className="text-xs md:text-sm font-medium text-gray-600 mb-2">MONTHLY INCOME</p>
                       <p className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-gray-900 mb-2">
-                        {balanceVisible ? `$${MOCK_PORTFOLIO_DATA.monthlyIncome.toLocaleString()}` : '••••••'}
+                        {balanceVisible ? `${portfolioData.monthlyIncome.toFixed(4)} HBAR` : '••••••'}
                       </p>
                       <p className="text-green-600 text-xs md:text-sm">15.6% yield annually</p>
                     </div>
@@ -382,75 +739,141 @@ const Dashboard: React.FC = () => {
               <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
                 <Badge variant="secondary" className="bg-gray-100 text-gray-900 px-3 py-1">
                   <Wallet className="w-4 h-4 mr-2" />
-                  {MOCK_OWNED_ASSETS.length} Assets
+                  {userAssets.length} Assets
                 </Badge>
-                <Button variant="outline" size="sm">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => walletConnected && fetchUserAssets(walletAddress)}
+                  disabled={loading || !walletConnected}
+                >
                   <PieChart className="w-4 h-4 mr-2" />
-                  View All
+                  {loading ? 'Loading...' : 'Refresh'}
                 </Button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-              {MOCK_OWNED_ASSETS.map((asset, index) => (
-                <Card key={asset.id} className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                  <CardContent className="p-4 md:p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center space-x-3 flex-1 min-w-0">
-                        <div className="p-2 md:p-3 bg-gray-100 rounded-lg flex-shrink-0">
-                          <asset.icon className="w-5 md:w-6 h-5 md:h-6 text-gray-600" />
+            {!walletConnected ? (
+              <Card className="border border-gray-200 shadow-sm">
+                <CardContent className="p-12 text-center">
+                  <Wallet className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Connect Your Wallet</h3>
+                  <p className="text-gray-600 mb-6">Connect your wallet to view your owned assets</p>
+                  <Button onClick={connectWallet} disabled={loading}>
+                    <Wallet className="w-4 h-4 mr-2" />
+                    {loading ? 'Connecting...' : 'Connect Wallet'}
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : userAssets.length === 0 ? (
+              <Card className="border border-gray-200 shadow-sm">
+                <CardContent className="p-12 text-center">
+                  <Building className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">No Assets Found</h3>
+                  <p className="text-gray-600 mb-6">
+                    {loading ? 'Loading your assets...' : 'You don\'t own any tokenized assets yet'}
+                  </p>
+                  {!loading && (
+                    <Button variant="outline" onClick={() => window.open('/marketplace', '_blank')}>
+                      <Building className="w-4 h-4 mr-2" />
+                      Browse Marketplace
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                {userAssets.map((asset, index) => {
+                  const assetValueHBAR = (parseFloat(asset.price) / Math.pow(10, 8)) * asset.amount; // Convert tinybar to HBAR
+                  const IconComponent = asset.type === 'Real Estate' ? Building : 
+                                       asset.type === 'Invoice' ? FileText :
+                                       asset.type === 'Commodity' ? Coins : Leaf;
+                  
+                  return (
+                    <Card key={asset.tokenId} className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                      <CardContent className="p-4 md:p-6">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center space-x-3 flex-1 min-w-0">
+                            <div className="p-2 md:p-3 bg-gray-100 rounded-lg flex-shrink-0">
+                              <IconComponent className="w-5 md:w-6 h-5 md:h-6 text-gray-600" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="text-base md:text-lg font-bold text-gray-900 truncate">{asset.name}</h3>
+                              <p className="text-gray-600 text-sm truncate">{asset.type}</p>
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0 ml-3">
+                            <Badge variant="outline" className="mb-2 text-xs">
+                              {asset.amount} tokens
+                            </Badge>
+                            <div className="flex items-center text-green-600">
+                              <ArrowUpRight className="w-3 h-3 mr-1" />
+                              <span className="font-medium text-xs">+5.0%</span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <h3 className="text-base md:text-lg font-bold text-gray-900 truncate">{asset.name}</h3>
-                          <p className="text-gray-600 text-sm truncate">{asset.type}</p>
-                        </div>
-                      </div>
-                      <div className="text-right flex-shrink-0 ml-3">
-                        <Badge variant="outline" className="mb-2 text-xs">
-                          {asset.tokens} tokens
-                        </Badge>
-                        <div className="flex items-center text-green-600">
-                          <ArrowUpRight className="w-3 h-3 mr-1" />
-                          <span className="font-medium text-xs">+{asset.performance}%</span>
-                        </div>
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-3 md:gap-4 mb-4">
-                      <div className="bg-gray-50 p-2 md:p-3 rounded-lg">
-                        <p className="text-xs font-medium text-gray-600 mb-1">INVESTED</p>
-                        <p className="text-sm md:text-lg font-bold text-gray-900">${asset.invested.toLocaleString()}</p>
-                      </div>
-                      <div className="bg-gray-50 p-2 md:p-3 rounded-lg">
-                        <p className="text-xs font-medium text-gray-600 mb-1">CURRENT VALUE</p>
-                        <p className="text-sm md:text-lg font-bold text-green-600">${asset.currentValue.toLocaleString()}</p>
-                      </div>
-                      <div className="bg-gray-50 p-2 md:p-3 rounded-lg">
-                        <p className="text-xs font-medium text-gray-600 mb-1">MONTHLY INCOME</p>
-                        <p className="text-sm md:text-lg font-bold text-gray-900">
-                          {asset.monthlyIncome > 0 ? `$${asset.monthlyIncome.toLocaleString()}` : 'N/A'}
-                        </p>
-                      </div>
-                      <div className="bg-gray-50 p-2 md:p-3 rounded-lg">
-                        <p className="text-xs font-medium text-gray-600 mb-1">PERFORMANCE</p>
-                        <p className="text-sm md:text-lg font-bold text-green-600">+{asset.performance}%</p>
-                      </div>
-                    </div>
+                        {asset.image && (
+                          <div className="mb-4">
+                            <img
+                              src={asset.image}
+                              alt={asset.name}
+                              className="w-full h-32 object-cover rounded-lg"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          </div>
+                        )}
 
-                    <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
-                      <Button variant="outline" className="flex-1 text-sm">
-                        <Eye className="w-4 h-4 mr-2" />
-                        View Details
-                      </Button>
-                      <Button className="flex-1 bg-gray-900 hover:bg-gray-800 text-sm">
-                        <Activity className="w-4 h-4 mr-2" />
-                        Manage
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                        <div className="grid grid-cols-2 gap-3 md:gap-4 mb-4">
+                          <div className="bg-gray-50 p-2 md:p-3 rounded-lg">
+                            <p className="text-xs font-medium text-gray-600 mb-1">TOKEN ID</p>
+                            <p className="text-sm md:text-lg font-bold text-gray-900">#{asset.tokenId}</p>
+                          </div>
+                          <div className="bg-gray-50 p-2 md:p-3 rounded-lg">
+                            <p className="text-xs font-medium text-gray-600 mb-1">TOTAL VALUE</p>
+                            <p className="text-sm md:text-lg font-bold text-green-600">{assetValueHBAR.toFixed(4)} HBAR</p>
+                          </div>
+                          <div className="bg-gray-50 p-2 md:p-3 rounded-lg">
+                            <p className="text-xs font-medium text-gray-600 mb-1">PRICE PER TOKEN</p>
+                            <p className="text-sm md:text-lg font-bold text-gray-900">
+                              {(parseFloat(asset.price) / Math.pow(10, 8)).toFixed(4)} HBAR
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 p-2 md:p-3 rounded-lg">
+                            <p className="text-xs font-medium text-gray-600 mb-1">PERFORMANCE</p>
+                            <p className="text-sm md:text-lg font-bold text-green-600">+5.0%</p>
+                          </div>
+                        </div>
+
+                        {asset.description && (
+                          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                            <p className="text-xs font-medium text-blue-600 mb-1">DESCRIPTION</p>
+                            <p className="text-sm text-blue-800">{asset.description}</p>
+                          </div>
+                        )}
+
+                        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                          <Button variant="outline" className="flex-1 text-sm">
+                            <Eye className="w-4 h-4 mr-2" />
+                            View Details
+                          </Button>
+                          <Button 
+                            variant="destructive" 
+                            className="flex-1 text-sm"
+                            onClick={() => openSellModal(asset)}
+                          >
+                            <DollarSign className="w-4 h-4 mr-2" />
+                            Sell Asset
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
 
@@ -469,7 +892,9 @@ const Dashboard: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-xs md:text-sm font-medium text-gray-600">MONTHLY INCOME</p>
-                    <p className="text-lg md:text-2xl font-bold text-gray-900">${MOCK_PORTFOLIO_DATA.monthlyIncome.toLocaleString()}</p>
+                    <p className="text-lg md:text-2xl font-bold text-gray-900">
+                      {walletConnected ? `${portfolioData.monthlyIncome.toFixed(4)} HBAR` : 'Connect Wallet'}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1108,11 +1533,40 @@ const Dashboard: React.FC = () => {
               </Button>
               <div>
                 <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Welcome back,</p>
-                <p className={`font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>John Investor</p>
+                <p className={`font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                  {walletConnected ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Investor'}
+                </p>
               </div>
             </div>
             
             <div className="flex items-center space-x-2 md:space-x-4">
+              {/* Wallet Connection */}
+              {!walletConnected ? (
+                <Button 
+                  onClick={connectWallet}
+                  disabled={loading}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <Wallet className="w-4 h-4 mr-2" />
+                  {loading ? 'Connecting...' : 'Connect Wallet'}
+                </Button>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <div className="hidden md:flex items-center space-x-2 px-3 py-1 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-sm font-medium text-green-700">Connected</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchUserAssets(walletAddress)}
+                    disabled={loading}
+                    className="hidden md:flex"
+                  >
+                    {loading ? 'Loading...' : 'Refresh'}
+                  </Button>
+                </div>
+              )}
               
               <Button 
                 variant="ghost" 
@@ -1154,6 +1608,105 @@ const Dashboard: React.FC = () => {
           </AnimatePresence>
         </main>
       </div>
+
+      {/* Sell Asset Modal */}
+      <Dialog open={sellModalOpen} onOpenChange={setSellModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <DollarSign className="w-5 h-5 text-red-600" />
+              <span>Sell Asset</span>
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedAsset && (
+            <div className="space-y-4">
+              {/* Asset Info */}
+              <div className="p-4 bg-gray-50 rounded-lg border">
+                <div className="flex items-center space-x-3 mb-3">
+                  <div className="p-2 bg-gray-100 rounded-lg">
+                    <Building className="w-5 h-5 text-gray-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-gray-900">{selectedAsset.name}</h3>
+                    <p className="text-sm text-gray-600">Token ID: #{selectedAsset.tokenId}</p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-gray-600">Owned Tokens</p>
+                    <p className="font-bold text-gray-900">{selectedAsset.amount}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Price per Token</p>
+                    <p className="font-bold text-green-600">
+                      {(parseFloat(selectedAsset.price) / Math.pow(10, 8)).toFixed(4)} HBAR
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sell Amount Input */}
+              <div className="space-y-2">
+                <Label htmlFor="sellAmount">Amount to Sell</Label>
+                <Input
+                  id="sellAmount"
+                  type="number"
+                  placeholder="Enter amount"
+                  value={sellAmount}
+                  onChange={(e) => setSellAmount(e.target.value)}
+                  min="1"
+                  max={selectedAsset.amount.toString()}
+                />
+                <p className="text-xs text-gray-500">
+                  Maximum: {selectedAsset.amount} tokens
+                </p>
+              </div>
+
+              {/* Estimated Return */}
+              {sellAmount && parseInt(sellAmount) > 0 && parseInt(sellAmount) <= selectedAsset.amount && (
+                <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                  <p className="text-sm text-green-700 font-medium">Estimated Return</p>
+                  <p className="text-lg font-bold text-green-600">
+                    {((parseFloat(selectedAsset.price) / Math.pow(10, 8)) * parseInt(sellAmount)).toFixed(4)} HBAR
+                  </p>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex space-x-3 pt-4">
+                <Button 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={() => setSellModalOpen(false)}
+                  disabled={sellLoading}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="destructive" 
+                  className="flex-1"
+                  onClick={sellAsset}
+                  disabled={sellLoading || !sellAmount || parseInt(sellAmount) <= 0 || parseInt(sellAmount) > selectedAsset.amount}
+                >
+                  {sellLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Selling...
+                    </>
+                  ) : (
+                    <>
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      Sell {sellAmount || '0'} Tokens
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

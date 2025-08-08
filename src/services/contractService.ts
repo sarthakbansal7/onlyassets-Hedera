@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 import adminABI from '../utils/adminABI.json';
 
-const CONTRACT_ADDRESS = "0x66EeAE947cb03e034664e45BFDA7c4bbAae4394f";
+const CONTRACT_ADDRESS = "0xC57D9378F54A2cA9ED87822E9922c79F684B2a2c";
 const RPC_URL = "https://testnet.hashio.io/api";
 
 const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
