@@ -76,7 +76,8 @@ const Login: React.FC = () => {
       const response = await authApi.verifyWallet(walletAddress);
       if (response.success && response.data.walletExists) {
         setAvailableRoles(response.data.availableRoles);
-        setUserPrimaryRole(response.data.userInfo?.primaryRole || null);
+        // Set primary role as the first available role (or null if none)
+        setUserPrimaryRole(response.data.availableRoles.length > 0 ? response.data.availableRoles[0] : null);
         if (response.data.userInfo) {
           setFormData(prev => ({
             ...prev,
