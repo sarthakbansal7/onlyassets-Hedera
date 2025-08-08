@@ -10,68 +10,19 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'react-hot-toast';
 import { BackgroundBeamsWithCollision } from '@/components/ui/background-beams-with-collision';
 import BuyModal from '@/components/BuyModal';
-
-// Mock data for demo purposes (replace with your actual data source)
-const MOCK_LISTINGS = [
-  {
-    asset_id: "1",
-    tokenId: "1",
-    name: "Luxury Manhattan Apartment",
-    description: "Prime location apartment in the heart of Manhattan with stunning city views",
-    image: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&h=600&fit=crop",
-    price: "125000",
-    amount: "100",
-    issuer: "0x1234...5678",
-    attributes: [
-      { trait_type: "Asset Type", value: "Real Estate" },
-      { trait_type: "Location", value: "Manhattan, NY" },
-      { trait_type: "Size", value: "2500 sq ft" },
-      { trait_type: "Bedrooms", value: "3" }
-    ]
-  },
-  {
-    asset_id: "2", 
-    tokenId: "2",
-    name: "Tech Startup Invoice",
-    description: "Invoice from growing tech company with strong payment history",
-    image: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=800&h=600&fit=crop",
-    price: "8500",
-    amount: "500",
-    issuer: "0x8765...4321",
-    attributes: [
-      { trait_type: "Asset Type", value: "Invoice" },
-      { trait_type: "Due Date", value: "2024-03-15" },
-      { trait_type: "Risk Rating", value: "Low" },
-      { trait_type: "Issuer", value: "TechCorp Inc" }
-    ]
-  },
-  {
-    asset_id: "3",
-    tokenId: "3", 
-    name: "Gold Bullion Reserve",
-    description: "Certified gold bullion stored in secure vault facilities",
-    image: "https://images.unsplash.com/photo-1610375461246-83df859d849d?w=800&h=600&fit=crop",
-    price: "45000",
-    amount: "250",
-    issuer: "0x9876...1234",
-    attributes: [
-      { trait_type: "Asset Type", value: "Commodity" },
-      { trait_type: "Weight", value: "100oz" },
-      { trait_type: "Purity", value: "99.9%" },
-      { trait_type: "Storage", value: "Swiss Vault" }
-    ]
-  }
-];
+import MarketplaceService from '@/services/marketplaceService';
+import { ethers } from 'ethers';
 
 interface MarketplaceListing {
-  asset_id: string;
   tokenId: string;
   name: string;
   description: string;
   image: string;
-  price: string;
-  amount: string;
-  issuer: string;
+  price: string; // in Wei
+  amount: number;
+  seller: string;
+  metadataURI: string;
+  metadata?: any;
   attributes: Array<{
     trait_type: string;
     value: string;
@@ -87,24 +38,64 @@ const Marketplace: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Simulate loading and use mock data
-    const loadMockData = async () => {
-      setLoading(true);
-      try {
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setListings(MOCK_LISTINGS);
-      } catch (error) {
-        console.error('Error loading mock data:', error);
-        setError('Failed to load listings');
-        toast.error('Failed to load listings');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadMockData();
+    loadMarketplaceListings();
   }, []);
+
+  const loadMarketplaceListings = async () => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      // Create a read-only marketplace service
+      const provider = new ethers.providers.JsonRpcProvider('https://testnet.hashio.io/api');
+      const marketplaceService = new MarketplaceService(undefined, provider as any);
+      
+      const result = await marketplaceService.getAllListings();
+      
+      // Transform the data to match our interface
+      const transformedListings: MarketplaceListing[] = [];
+      
+      for (let i = 0; i < result.tokenIds.length; i++) {
+        const metadata = result.metadata[i];
+        
+        if (!metadata) continue; // Skip if no metadata
+        
+        const listing: MarketplaceListing = {
+          tokenId: result.tokenIds[i],
+          name: metadata.name || `Asset ${result.tokenIds[i]}`,
+          description: metadata.description || 'No description available',
+          image: metadata.image || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&h=600&fit=crop',
+          price: result.prices[i], // Price is already a string in Wei
+          amount: result.amounts[i],
+          seller: result.sellers[i],
+          metadataURI: result.metadataURIs[i],
+          metadata: metadata,
+          attributes: metadata.attributes || []
+        };
+        
+        transformedListings.push(listing);
+      }
+      
+      setListings(transformedListings);
+      
+      if (transformedListings.length === 0) {
+        setError('No active listings found on the marketplace');
+      }
+      
+    } catch (error: any) {
+      console.error('Error loading marketplace listings:', error);
+      setError(`Failed to load marketplace listings: ${error.message}`);
+      toast.error('Failed to load marketplace listings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePurchaseSuccess = () => {
+    // Reload listings after successful purchase
+    loadMarketplaceListings();
+    toast.success('Purchase completed! Refreshing marketplace...');
+  };
 
   if (loading) {
     return (
@@ -204,9 +195,9 @@ const Marketplace: React.FC = () => {
                 <span className="text-gray-600 hover:text-gray-900 cursor-pointer transition-colors">About</span>
                 <span className="text-gray-600 hover:text-gray-900 cursor-pointer transition-colors">Help</span>
               </div>
-              <div className="flex items-center space-x-2 px-4 py-2 bg-gray-100 rounded-xl">
+              <div className="flex items-center space-x-2 px-4 py-2 bg-green-100 rounded-xl">
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span className="text-sm font-medium text-gray-700">Demo Mode</span>
+                <span className="text-sm font-medium text-green-700">Live Marketplace</span>
               </div>
             </div>
           </div>
@@ -229,6 +220,16 @@ const Marketplace: React.FC = () => {
               <p className="text-gray-600">Explore our complete collection of tokenized real-world assets</p>
             </div>
             <div className="flex items-center space-x-4">
+              <button 
+                onClick={loadMarketplaceListings}
+                className="px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors flex items-center space-x-2"
+                title="Refresh listings"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
               <button className="px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
@@ -297,12 +298,17 @@ const Marketplace: React.FC = () => {
       {selectedListing && (
         <BuyModal
           asset={{
-            id: selectedListing.tokenId,
-            title: selectedListing.name,
-            price: parseFloat(selectedListing.price),
-            image: selectedListing.image
+            tokenId: selectedListing.tokenId,
+            name: selectedListing.name,
+            description: selectedListing.description,
+            price: selectedListing.price, // Price in Wei
+            amount: selectedListing.amount,
+            image: selectedListing.image,
+            seller: selectedListing.seller,
+            metadata: selectedListing.metadata
           }}
           onClose={() => setSelectedListing(null)}
+          onSuccess={handlePurchaseSuccess}
         />
       )}
 
@@ -396,15 +402,15 @@ const FeaturedPropertiesCarousel: React.FC<{
               <div className="flex items-center justify-between mb-8">
                 <div>
                   <div className="text-3xl font-bold text-white mb-1">
-                    ${parseFloat(listings[currentIndex].price).toLocaleString()}
+                    {(parseFloat(listings[currentIndex].price) / Math.pow(10, 18)).toFixed(4)} HBAR
                   </div>
                   <div className="text-gray-200 text-sm">
-                    Demo Price
+                    Price per token
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-green-400 font-bold">Token #{listings[currentIndex].tokenId}</div>
-                  <div className="text-gray-200 text-sm">Unique Asset</div>
+                  <div className="text-gray-200 text-sm">{listings[currentIndex].amount} Available</div>
                 </div>
               </div>
 
@@ -516,11 +522,11 @@ const ProfessionalListingsGrid: React.FC<{
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {listings.map((listing, index) => (
           <motion.div
-            key={listing.asset_id}
+            key={listing.tokenId}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: index * 0.1 }}
-            layoutId={`listing-${listing.asset_id}`}
+            layoutId={`listing-${listing.tokenId}`}
             onClick={() => setActiveListing(listing)}
             className="group bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 cursor-pointer border border-gray-200/50 hover:border-gray-300/50 overflow-hidden hover:scale-[1.02]"
           >
@@ -553,13 +559,13 @@ const ProfessionalListingsGrid: React.FC<{
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-2xl font-bold bg-gradient-to-r from-gray-800 to-black bg-clip-text text-transparent">
-                    ${parseFloat(listing.price).toLocaleString()}
+                    {(parseFloat(listing.price) / Math.pow(10, 18)).toFixed(4)} HBAR
                   </p>
-                  <p className="text-xs text-gray-500">Demo Price</p>
+                  <p className="text-xs text-gray-500">Price per token</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-medium text-green-600">+50 XP</p>
-                  <p className="text-xs text-gray-500">Reward</p>
+                  <p className="text-sm font-medium text-green-600">{listing.amount} Available</p>
+                  <p className="text-xs text-gray-500">Tokens</p>
                 </div>
               </div>
 
@@ -575,7 +581,7 @@ const ProfessionalListingsGrid: React.FC<{
                     onSelectListing(listing);
                   }}
                 >
-                  Buy Now
+                  Buy Asset
                 </button>
               </div>
             </div>
@@ -629,17 +635,17 @@ const ProfessionalExpandedDetail: React.FC<{
             <div className="mb-6">
               <div className="flex items-baseline space-x-4 mb-2">
                 <span className="text-4xl font-bold bg-gradient-to-r from-gray-800 to-black bg-clip-text text-transparent">
-                  ${parseFloat(listing.price).toLocaleString()}
+                  {(parseFloat(listing.price) / Math.pow(10, 18)).toFixed(4)} HBAR
                 </span>
-                <span className="text-lg text-gray-500">Demo Price</span>
+                <span className="text-lg text-gray-500">Price per token</span>
               </div>
               <div className="flex items-center space-x-4 text-sm text-gray-600">
                 <div className="flex items-center space-x-1">
                   <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  <span>Available</span>
+                  <span>Available Now</span>
                 </div>
                 <span>•</span>
-                <span>+50 XP Reward</span>
+                <span>Seller: {listing.seller.slice(0, 6)}...{listing.seller.slice(-4)}</span>
               </div>
             </div>
 
@@ -683,7 +689,7 @@ const ProfessionalExpandedDetail: React.FC<{
               className="flex-1 px-6 py-3 bg-gradient-to-r from-gray-800 to-black text-white rounded-xl hover:from-gray-900 hover:to-gray-800 transition-all duration-300 shadow-lg hover:shadow-xl font-medium"
               onClick={() => onBuy(listing)}
             >
-              Purchase Asset
+              Buy Asset
             </button>
           </div>
         </div>
