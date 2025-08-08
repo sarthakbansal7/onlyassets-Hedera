@@ -1,1 +1,1 @@
-export const backendDomain = "https://onlyassets-server.vercel.app";
+export const backendDomain = "https://onlyassets-server.onrender.com";
