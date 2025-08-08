@@ -30,10 +30,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { authApi, type RegisterData, type LoginData } from '@/api/authApi';
 import { useWallet } from '@/context/WalletContext';
+import { useAuth } from '@/context/AuthContext';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const { address, isConnected, connectWallet, disconnectWallet } = useWallet();
+  const { login } = useAuth();
   
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
@@ -175,32 +177,10 @@ const Login: React.FC = () => {
           };
         }
 
-        const response = await authApi.login(loginData);
-        
-        if (response.success) {
-          setSuccess('Login successful! Redirecting...');
-          // Navigate based on the user's role
-          const userRole = response.data.user?.primaryRole || response.data.user?.roles?.[0] || 'user';
-          let dashboardRoute = '/dashboard'; // default for users
-          
-          switch (userRole) {
-            case 'admin':
-              dashboardRoute = '/admin';
-              break;
-            case 'issuer':
-              dashboardRoute = '/issuer';
-              break;
-            case 'manager':
-              dashboardRoute = '/manager';
-              break;
-            default:
-              dashboardRoute = '/dashboard';
-          }
-          
-          setTimeout(() => {
-            navigate(dashboardRoute);
-          }, 1000);
-        }
+        // Use Auth Context login method
+        await login(loginData);
+        setSuccess('Login successful! Redirecting...');
+        // Auth Context will handle navigation automatically
       } else {
         // Register
         const registerData: RegisterData = {

@@ -96,7 +96,7 @@ export interface ApiError {
 }
 
 // Base API configuration
-const API_BASE_URL = `${backendDomain}/auth`;
+export const API_BASE_URL = `${backendDomain}/auth`;
 
 // Helper function to get auth headers
 const getAuthHeaders = (): HeadersInit => {
@@ -296,7 +296,15 @@ export const authApi = {
   isAuthenticated: (): boolean => {
     const token = localStorage.getItem('authToken');
     const user = localStorage.getItem('user');
-    return !!(token && user);
+    const hasTokenAndUser = !!(token && user);
+    
+    console.log('Authentication check:', {
+      hasToken: !!token,
+      hasUser: !!user,
+      isAuthenticated: hasTokenAndUser
+    });
+    
+    return hasTokenAndUser;
   },
 
   // Get current user from localStorage

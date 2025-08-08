@@ -13,28 +13,71 @@ import Dashboard from "./pages/dashboard/dashboard";
 import Login from "./pages/login/login";
 import ManagerDashboard from "./pages/managerdashboard/managerDashboard";
 import Header from "./components/Header";
+import ProtectedRoute from "./components/ProtectedRoute";
+import { AuthProvider } from "./context/AuthContext";
 
 const App = () => (
   <TooltipProvider>
     <BrowserRouter>
-      <div className="relative min-h-screen">
-        <div className="content">
-          <Toaster />
-          <Sonner />
-          <HotToaster />
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/marketplace" element={<Marketplace />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/issuer" element={<Issuer />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/manager" element={<ManagerDashboard />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+      <AuthProvider>
+        <div className="relative min-h-screen">
+          <div className="content">
+            <Toaster />
+            <Sonner />
+            <HotToaster />
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/" element={<Index />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/about" element={<About />} />
+              
+              {/* Protected Routes */}
+              <Route 
+                path="/admin" 
+                element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <Admin />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/issuer" 
+                element={
+                  <ProtectedRoute allowedRoles={['issuer']}>
+                    <Issuer />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/manager" 
+                element={
+                  <ProtectedRoute allowedRoles={['manager']}>
+                    <ManagerDashboard />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/dashboard" 
+                element={
+                  <ProtectedRoute allowedRoles={['admin', 'issuer', 'manager', 'user']}>
+                    <Dashboard />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/marketplace" 
+                element={
+                  <ProtectedRoute allowedRoles={['admin', 'issuer', 'manager', 'user']}>
+                    <Marketplace />
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </div>
         </div>
-      </div>
+      </AuthProvider>
     </BrowserRouter>
   </TooltipProvider>
 );

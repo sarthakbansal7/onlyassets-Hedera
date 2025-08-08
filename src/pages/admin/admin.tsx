@@ -368,7 +368,7 @@ const Admin: React.FC = () => {
         toast.success('Manager added successfully!');
       }
 
-      // Step 4: Backend registration (keep the existing backend flow)
+      // Step 4: Backend registration using the regular register route
       const userData = {
         firstName: userForm.firstName,
         lastName: userForm.lastName,
@@ -380,8 +380,8 @@ const Admin: React.FC = () => {
       };
 
       try {
-        await authApi.createUser(userData);
-        console.log('User registered in backend successfully');
+        await authApi.register(userData);
+        console.log('User registered in backend successfully via register route');
       } catch (backendError) {
         console.error('Backend registration failed (continuing anyway):', backendError);
         // Don't fail the whole process if backend fails
@@ -524,9 +524,9 @@ const Admin: React.FC = () => {
       return;
     }
 
-    // Validate token ID is a number
-    if (!/^\d+$/.test(assignTokenForm.tokenId)) {
-      toast.error('Token ID must be a valid number');
+    // Token ID can now be any string (no longer restricted to numbers)
+    if (assignTokenForm.tokenId.trim().length === 0) {
+      toast.error('Token ID cannot be empty');
       return;
     }
 
@@ -1516,14 +1516,14 @@ const Admin: React.FC = () => {
                 </Label>
                 <Input
                   id="tokenId"
-                  type="number"
-                  placeholder="Enter token ID (e.g., 1, 2, 3...)"
+                  type="text"
+                  placeholder="Enter token ID (e.g., token_001, asset_123...)"
                   value={assignTokenForm.tokenId}
                   onChange={(e) => setAssignTokenForm(prev => ({ ...prev, tokenId: e.target.value }))}
                   className={`${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder:text-slate-400' : 'bg-white border-slate-300'}`}
                 />
                 <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                  Enter the numeric ID of the token you want to assign to this manager.
+                  Enter the ID of the token you want to assign to this manager (can be alphanumeric).
                 </p>
               </div>
             </div>
