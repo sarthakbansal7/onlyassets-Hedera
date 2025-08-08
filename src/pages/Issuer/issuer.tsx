@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ethers } from 'ethers';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -6,12 +7,10 @@ import { Label } from '@/components/ui/label';
 import { LabelInputContainer } from '@/components/ui/form-utils';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { Copy, Home, TrendingUp, Building2, Plus, FileText, BarChart3, Shield, Users, Globe, Sun, Moon, Loader2, Wallet, RefreshCw } from 'lucide-react';
+import { Copy, Home, TrendingUp, Building2, Plus, FileText, BarChart3, Shield, Users, Globe, Sun, Moon, Loader2, Wallet, RefreshCw, ExternalLink } from 'lucide-react';
 import { uploadFileToIPFS, uploadJSONToIPFS } from '@/utils/ipfs';
 import { useWallet } from '@/context/WalletContext';
-import HederaTokenService, { TokenCreationData } from '@/services/hederaService';
 import { getAllIssuers, getAllManagers, isIssuer } from '@/services/contractService';
-import { HEDERA_CONFIG } from '@/config/hedera';
 
 const assetTypes = [
   'Real Estate',
@@ -30,14 +29,7 @@ const priceTokens = [
 
 const Issuer: React.FC = () => {
   // Wallet integration
-  const { address, isConnected, connectWallet } = useWallet();
-  
-  // Hedera Token Service
-  const [hederaService] = useState(() => new HederaTokenService({
-    network: HEDERA_CONFIG.NETWORK,
-    operatorId: HEDERA_CONFIG.OPERATOR_ID,
-    operatorKey: HEDERA_CONFIG.OPERATOR_KEY
-  }));
+  const { address, isConnected, connectWallet, provider, signer } = useWallet();
   
   // Authorization state
   const [isAuthorizedIssuer, setIsAuthorizedIssuer] = useState<boolean | null>(null);
@@ -64,14 +56,15 @@ const Issuer: React.FC = () => {
 
   // Dialog states
   const [showNFTDialog, setShowNFTDialog] = useState(false);
-  const [showListDialog, setShowListDialog] = useState(false);
 
   // NFT form state
   const [mintStep, setMintStep] = useState(1);
+  const [tokenType, setTokenType] = useState<'ERC20' | 'NFT'>('ERC20');
   const [nftTitle, setNftTitle] = useState('');
   const [nftDescription, setNftDescription] = useState('');
   const [nftAssetType, setNftAssetType] = useState(0);
   const [nftPriceToken, setNftPriceToken] = useState('USD');
+  const [nftPricePerToken, setNftPricePerToken] = useState('1.0'); // Price per token in HBAR (used for both reference and marketplace)
   const [nftEarnXP, setNftEarnXP] = useState('32000');
   const [nftImageFiles, setNftImageFiles] = useState<File[]>([]);
   const [nftId, setNftId] = useState('');
@@ -102,12 +95,6 @@ const Issuer: React.FC = () => {
   const [carbonStandard, setCarbonStandard] = useState('');
   const [carbonProjectType, setCarbonProjectType] = useState('');
   const [carbonCO2Offset, setCarbonCO2Offset] = useState('');
-
-  // List Asset form state
-  const [listTokenId, setListTokenId] = useState('');
-  const [listAmount, setListAmount] = useState('');
-  const [listPrice, setListPrice] = useState('');
-  const [isListingAsset, setIsListingAsset] = useState(false);
 
   // Success states
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
@@ -197,7 +184,7 @@ const Issuer: React.FC = () => {
 
   const handleMintNFT = async () => {
     // Check wallet connection and authorization
-    if (!isConnected || !address) {
+    if (!isConnected || !address || !provider || !signer) {
       toast.error('Please connect your wallet first');
       return;
     }
@@ -213,8 +200,14 @@ const Issuer: React.FC = () => {
     }
 
     // Validate form
-    if (!nftTitle || !nftDescription || nftImageFiles.length === 0 || !nftAmount || !nftEarnXP) {
-      toast.error('Please fill all required fields and upload at least one image');
+    if (!nftTitle || !nftDescription || !nftAmount || !nftPricePerToken) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+
+    // For NFTs, images are required. For ERC20 tokens, they're optional
+    if (tokenType === 'NFT' && nftImageFiles.length === 0) {
+      toast.error('Please upload at least one image for NFT tokens');
       return;
     }
 
@@ -222,46 +215,51 @@ const Issuer: React.FC = () => {
     
     try {
       // Step 1: Upload images to IPFS
+      toast('Uploading images to IPFS...');
       const imageUrls = [];
-      for (const file of nftImageFiles) {
-        const imageMetadata = {
-          name: `${nftTitle} - Image`,
-          description: `Image for ${nftTitle}`,
-          attributes: [
-            {
-              trait_type: "Asset Type",
-              value: assetTypes[nftAssetType]
-            },
-            {
-              trait_type: "Price Token", 
-              value: nftPriceToken
-            },
-            {
-              trait_type: "Price",
-              value: parseInt(nftEarnXP)
-            }
-          ]
-        };
-        const imageUrl = await uploadFileToIPFS(file, imageMetadata);
-        imageUrls.push(imageUrl);
+      if (nftImageFiles.length > 0) {
+        for (const file of nftImageFiles) {
+          const imageMetadata = {
+            name: `${nftTitle} - Image`,
+            description: `Image for ${nftTitle}`,
+            attributes: [
+              {
+                trait_type: "Asset Type",
+                value: assetTypes[nftAssetType]
+              }
+            ]
+          };
+          const imageUrl = await uploadFileToIPFS(file, imageMetadata);
+          imageUrls.push(imageUrl);
+        }
       }
 
-      // Step 2: Create metadata object
-      const metadata = {
+      // Step 2: Create comprehensive metadata object with all form data
+      toast('Creating comprehensive metadata...');
+      const comprehensiveMetadata: any = {
         name: nftTitle,
         description: nftDescription,
         images: imageUrls,
+        assetType: assetTypes[nftAssetType],
+        baseCurrency: nftPriceToken,
+        pricePerTokenHBAR: parseFloat(nftPricePerToken),
+        tokenRewards: parseInt(nftEarnXP),
+        totalSupply: parseInt(nftAmount),
         attributes: [
           {
             trait_type: "Asset Type",
             value: assetTypes[nftAssetType]
           },
           {
-            trait_type: "Price Token",
+            trait_type: "Base Currency",
             value: nftPriceToken
           },
           {
-            trait_type: "Price",
+            trait_type: "Price per Token (HBAR)",
+            value: parseFloat(nftPricePerToken)
+          },
+          {
+            trait_type: "Token Rewards",
             value: parseInt(nftEarnXP)
           },
           {
@@ -273,64 +271,136 @@ const Issuer: React.FC = () => {
         animation_url: ""
       };
 
-      // Add asset-specific attributes based on type
+      // Add asset-specific attributes and data based on type
       if (nftAssetType === 0) { // Real Estate
-        if (realEstateSize) metadata.attributes.push({ trait_type: "Size", value: `${realEstateSize} sq ft` });
-        if (realEstateBedrooms) metadata.attributes.push({ trait_type: "Bedrooms", value: realEstateBedrooms });
-        if (realEstateLocation) metadata.attributes.push({ trait_type: "Location", value: realEstateLocation });
+        if (realEstateSize) {
+          comprehensiveMetadata.attributes.push({ trait_type: "Size", value: `${realEstateSize} sq ft` });
+          comprehensiveMetadata.realEstate = {
+            size: realEstateSize,
+            bedrooms: realEstateBedrooms,
+            location: realEstateLocation
+          };
+        }
+        if (realEstateBedrooms) comprehensiveMetadata.attributes.push({ trait_type: "Bedrooms", value: realEstateBedrooms });
+        if (realEstateLocation) comprehensiveMetadata.attributes.push({ trait_type: "Location", value: realEstateLocation });
       } else if (nftAssetType === 1) { // Invoice
-        if (invoiceIssuer) metadata.attributes.push({ trait_type: "Issuer", value: invoiceIssuer });
-        if (invoiceDueDate) metadata.attributes.push({ trait_type: "Due Date", value: invoiceDueDate });
-        if (invoiceRiskRating) metadata.attributes.push({ trait_type: "Risk Rating", value: invoiceRiskRating });
+        if (invoiceIssuer) {
+          comprehensiveMetadata.attributes.push({ trait_type: "Issuer", value: invoiceIssuer });
+          comprehensiveMetadata.invoice = {
+            issuer: invoiceIssuer,
+            dueDate: invoiceDueDate,
+            riskRating: invoiceRiskRating
+          };
+        }
+        if (invoiceDueDate) comprehensiveMetadata.attributes.push({ trait_type: "Due Date", value: invoiceDueDate });
+        if (invoiceRiskRating) comprehensiveMetadata.attributes.push({ trait_type: "Risk Rating", value: invoiceRiskRating });
       } else if (nftAssetType === 2) { // Commodity
-        if (commodityWeight) metadata.attributes.push({ trait_type: "Weight", value: commodityWeight });
-        if (commodityPurity) metadata.attributes.push({ trait_type: "Purity", value: commodityPurity });
-        if (commodityStorage) metadata.attributes.push({ trait_type: "Storage", value: commodityStorage });
+        if (commodityWeight) {
+          comprehensiveMetadata.attributes.push({ trait_type: "Weight", value: commodityWeight });
+          comprehensiveMetadata.commodity = {
+            weight: commodityWeight,
+            purity: commodityPurity,
+            storage: commodityStorage
+          };
+        }
+        if (commodityPurity) comprehensiveMetadata.attributes.push({ trait_type: "Purity", value: commodityPurity });
+        if (commodityStorage) comprehensiveMetadata.attributes.push({ trait_type: "Storage", value: commodityStorage });
       } else if (nftAssetType === 3) { // Stocks
-        if (stockSymbol) metadata.attributes.push({ trait_type: "Symbol", value: stockSymbol });
-        if (stockExchange) metadata.attributes.push({ trait_type: "Exchange", value: stockExchange });
-        if (stockSector) metadata.attributes.push({ trait_type: "Sector", value: stockSector });
+        if (stockSymbol) {
+          comprehensiveMetadata.attributes.push({ trait_type: "Symbol", value: stockSymbol });
+          comprehensiveMetadata.stocks = {
+            symbol: stockSymbol,
+            exchange: stockExchange,
+            sector: stockSector
+          };
+        }
+        if (stockExchange) comprehensiveMetadata.attributes.push({ trait_type: "Exchange", value: stockExchange });
+        if (stockSector) comprehensiveMetadata.attributes.push({ trait_type: "Sector", value: stockSector });
       } else if (nftAssetType === 4) { // Carbon Credits
-        if (carbonStandard) metadata.attributes.push({ trait_type: "Standard", value: carbonStandard });
-        if (carbonProjectType) metadata.attributes.push({ trait_type: "Project Type", value: carbonProjectType });
-        if (carbonCO2Offset) metadata.attributes.push({ trait_type: "CO2 Offset", value: `${carbonCO2Offset} tons` });
+        if (carbonStandard) {
+          comprehensiveMetadata.attributes.push({ trait_type: "Standard", value: carbonStandard });
+          comprehensiveMetadata.carbonCredits = {
+            standard: carbonStandard,
+            projectType: carbonProjectType,
+            co2Offset: carbonCO2Offset
+          };
+        }
+        if (carbonProjectType) comprehensiveMetadata.attributes.push({ trait_type: "Project Type", value: carbonProjectType });
+        if (carbonCO2Offset) comprehensiveMetadata.attributes.push({ trait_type: "CO2 Offset", value: `${carbonCO2Offset} tons` });
       }
 
-      // Step 3: Upload metadata to IPFS
-      const metadataUri = await uploadJSONToIPFS(metadata);
+      // Step 3: Upload comprehensive metadata to IPFS
+      toast('Uploading metadata to IPFS...');
+      const metadataUri = await uploadJSONToIPFS(comprehensiveMetadata);
+      console.log('✅ Metadata uploaded to IPFS:', metadataUri);
 
-      // Step 4: Request user signature for token creation
-      toast('Please sign the token creation request...');
-      const tokenData: TokenCreationData = {
-        name: nftTitle,
-        description: nftDescription,
-        metadataURI: metadataUri,
-        amount: parseInt(nftAmount),
-        price: parseInt(nftEarnXP),
-        assetType: assetTypes[nftAssetType]
-      };
+      // Step 4: Create token on Hedera using the comprehensive metadata
+      toast(`Creating ${tokenType} token on Hedera...`);
+      
+      const { HederaSDKService } = await import('../../services/hederaSDKService');
+      const hederaService = new HederaSDKService();
+      
+      let result;
+      
+      if (tokenType === 'ERC20') {
+        // Create ERC20 fungible token (Note: Hedera fungible tokens don't support metadata URI directly)
+        result = await hederaService.createFungibleToken({
+          name: nftTitle,
+          symbol: assetTypes[nftAssetType].substring(0, 5).toUpperCase(),
+          supply: parseInt(nftAmount),
+          decimals: 0, // Use 0 decimals for whole number tokens
+          tokenType: 'FUNGIBLE'
+        });
+      } else {
+        // Create NFT collection with metadata URI
+        result = await hederaService.createNFTCollection({
+          name: nftTitle,
+          symbol: assetTypes[nftAssetType].substring(0, 5).toUpperCase(),
+          supply: parseInt(nftAmount),
+          metadataURI: metadataUri, // Use the comprehensive metadata
+          tokenType: 'NFT'
+        });
+      }
+      
+      hederaService.close();
 
-      const { signature, message } = await hederaService.requestTokenCreationSignature(
-        tokenData,
-        address,
-        window.ethereum
-      );
-
-      // Step 5: Create HTS token
-      toast('Creating token on Hedera network...');
-      const result = await hederaService.createToken(
-        tokenData,
-        address,
-        signature,
-        message
-      );
+      // Step 5: Auto-list on marketplace with unique token ID using HBAR price (signed by issuer)
+      toast('Auto-listing on marketplace...');
+      
+      try {
+        const { MarketplaceService } = await import('../../services/marketplaceService');
+        // Use the issuer's signer so MetaMask pops up for signing
+        const marketplaceService = new MarketplaceService(undefined, signer);
+        
+        // Generate unique token ID using timestamp + random to prevent collisions
+        const timestamp = Date.now().toString().slice(-6); // Last 6 digits of timestamp
+        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0'); // 3-digit random
+        const uniqueTokenId = `${timestamp}${random}`; // Creates unique 9-digit ID
+        
+        // Convert HBAR price to Wei (1 HBAR = 10^18 Wei) using ethers for precision
+        const { ethers } = await import('ethers');
+        const priceInWei = ethers.utils.parseEther(nftPricePerToken.toString());
+        
+        // Call listAsset with issuer's signer (this will trigger MetaMask)
+        await marketplaceService.listAsset(
+          uniqueTokenId,           // _tokenId: string
+          parseInt(nftAmount),     // _amount: uint256  
+          Number(priceInWei.toString()), // _price: number (in Wei) - convert BigNumber to number
+          metadataUri             // _metadataURI: string (comprehensive metadata)
+        );
+        
+        toast.success(`Auto-listed on marketplace with ID: ${uniqueTokenId} at ${nftPricePerToken} HBAR per token`);
+      } catch (listingError: any) {
+        console.error('Auto-listing error:', listingError);
+        toast.error('Token created but auto-listing failed. You can list manually later.');
+      }
 
       // Step 6: Save token to local storage for user reference
       const newToken = {
         tokenId: result.tokenId,
         name: nftTitle,
         amount: parseInt(nftAmount),
-        price: parseInt(nftEarnXP),
+        price: parseFloat(nftPricePerToken), // Use single price for both token and marketplace
         createdAt: new Date()
       };
       
@@ -343,7 +413,8 @@ const Issuer: React.FC = () => {
       setShowNFTDialog(false);
       resetNFTForm();
       
-      toast.success(`Token created successfully! Token ID: ${result.tokenId}`);
+      toast.success(`${tokenType} Token created successfully! Token ID: ${result.tokenId}`);
+      toast.success(`View on HashScan: https://hashscan.io/testnet/tx/${result.transactionId}`);
 
     } catch (error: any) {
       console.error('Token creation error:', error);
@@ -361,105 +432,15 @@ const Issuer: React.FC = () => {
     }
   };
 
-  const handleListAsset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Check wallet connection and authorization
-    if (!isConnected || !address) {
-      toast.error('Please connect your wallet first');
-      return;
-    }
-
-    if (isAuthorizedIssuer === false) {
-      toast.error('Your wallet is not authorized as an issuer');
-      return;
-    }
-
-    setIsListingAsset(true);
-    
-    try {
-      // Validate required fields
-      if (!listTokenId || !listAmount || !listPrice) {
-        toast.error('Please fill all required fields');
-        return;
-      }
-
-      // Validate token amount
-      const amount = parseInt(listAmount);
-      const price = parseInt(listPrice);
-      
-      if (amount <= 0) {
-        toast.error('Amount must be greater than 0');
-        return;
-      }
-
-      if (price <= 0) {
-        toast.error('Price must be greater than 0');
-        return;
-      }
-
-      // Check if user owns the token
-      toast('Checking token ownership...');
-      const balance = await hederaService.getTokenBalance(listTokenId, address);
-      
-      if (balance < amount) {
-        toast.error(`Insufficient token balance. You have ${balance} tokens but trying to list ${amount}`);
-        return;
-      }
-
-      // Step 1: Transfer tokens to marketplace (this will trigger marketplace listing)
-      toast('Transferring tokens to marketplace...');
-      const transferResult = await hederaService.transferToMarketplace(
-        listTokenId,
-        amount,
-        price,
-        address,
-        window.ethereum
-      );
-
-      // Step 2: List asset on marketplace contract
-      toast('Creating marketplace listing...');
-      // TODO: Implement marketplace listing with new contract service
-      // const listingResult = await listAssetOnMarketplace(
-      //   listTokenId,
-      //   amount
-      // );
-
-      // Step 3: Update local state and show success
-      toast.success(`Asset listed successfully! Transaction: ${transferResult.transactionId}`);
-      setShowListDialog(false);
-      
-      // Reset form
-      setListTokenId('');
-      setListAmount('');
-      setListPrice('');
-
-      // Optionally refresh user's token list
-      // This could trigger a re-fetch of user's created tokens
-
-    } catch (error: any) {
-      console.error('Error listing asset:', error);
-      if (error.message.includes('User denied')) {
-        toast.error('Transaction was cancelled by user');
-      } else if (error.message.includes('Insufficient balance')) {
-        toast.error('Insufficient token balance for listing');
-      } else if (error.message.includes('Invalid token')) {
-        toast.error('Invalid token ID. Please check and try again.');
-      } else {
-        toast.error(`Failed to list asset: ${error.message}`);
-      }
-    } finally {
-      setIsListingAsset(false);
-    }
-  };
-
   const resetNFTForm = () => {
     setMintStep(1);
+    setTokenType('ERC20');
     setNftTitle('');
     setNftDescription('');
     setNftImageFiles([]);
     setNftAssetType(0);
     setNftPriceToken('USD');
+    setNftPricePerToken('1.0');
     setNftEarnXP('32000');
     setNftAmount('');
     
@@ -624,7 +605,7 @@ const Issuer: React.FC = () => {
         </div>
 
         {/* Main Actions */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-1 gap-8 mb-8">
           {/* Asset Creation */}
           <div className={`${isDarkMode ? 'bg-gray-900/50 backdrop-blur-xl border-gray-800' : 'bg-white border-gray-200'} rounded-xl border shadow-xl`}>
             <div className={`p-6 border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-100'}`}>
@@ -633,8 +614,8 @@ const Issuer: React.FC = () => {
                   <Plus className={`w-5 h-5 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
                 </div>
                 <div>
-                  <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Tokenize New Asset</h3>
-                  <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'} text-sm`}>Convert physical assets into digital tokens</p>
+                  <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Tokenize & Auto-List Asset</h3>
+                  <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'} text-sm`}>Convert assets into tokens and automatically list on marketplace</p>
                 </div>
               </div>
             </div>
@@ -654,8 +635,8 @@ const Issuer: React.FC = () => {
                     <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>HTS NFT</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Network Fee:</span>
-                    <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>~$0.0001</span>
+                    <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Auto-Listing:</span>
+                    <span className="text-green-400 font-medium">Enabled</span>
                   </div>
                 </div>
                 <Button 
@@ -667,50 +648,6 @@ const Issuer: React.FC = () => {
                   {!isConnected ? 'Connect Wallet First' : 
                    isAuthorizedIssuer === false ? 'Not Authorized' :
                    'Start Tokenization'}
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Market Listing */}
-          <div className={`${isDarkMode ? 'bg-gray-900/50 backdrop-blur-xl border-gray-800' : 'bg-white border-gray-200'} rounded-xl border shadow-xl`}>
-            <div className={`p-6 border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-100'}`}>
-              <div className="flex items-center space-x-3">
-                <div className={`p-2 ${isDarkMode ? 'bg-green-500/20' : 'bg-green-50'} rounded-lg`}>
-                  <TrendingUp className={`w-5 h-5 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
-                </div>
-                <div>
-                  <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>List on Marketplace</h3>
-                  <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'} text-sm`}>Offer your tokens for public trading</p>
-                </div>
-              </div>
-            </div>
-            <div className="p-6">
-              <div className="space-y-4">
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Listing Fee:</span>
-                    <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>2.5%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Settlement:</span>
-                    <span className="text-green-400 font-medium">Instant</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Min. Order Size:</span>
-                    <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>1 Token</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Market Hours:</span>
-                    <span className="text-green-400 font-medium">24/7</span>
-                  </div>
-                </div>
-                <Button 
-                  onClick={() => setShowListDialog(true)}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 rounded-lg transition-colors"
-                >
-                  <TrendingUp className="w-4 h-4 mr-2" />
-                  Create Listing
                 </Button>
               </div>
             </div>
@@ -774,18 +711,69 @@ const Issuer: React.FC = () => {
               </div>
             </div>
             <div className="p-6">
-              <div className="text-center py-12">
-                <Building2 className={`w-12 h-12 ${isDarkMode ? 'text-gray-400' : 'text-gray-300'} mx-auto mb-4`} />
-                <h4 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'} mb-2`}>No Assets Yet</h4>
-                <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mb-4`}>Start by tokenizing your first real-world asset</p>
-                <Button 
-                  onClick={() => setShowNFTDialog(true)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Tokenize Asset
-                </Button>
-              </div>
+              {createdTokens.length === 0 ? (
+                <div className="text-center py-12">
+                  <Building2 className={`w-12 h-12 ${isDarkMode ? 'text-gray-400' : 'text-gray-300'} mx-auto mb-4`} />
+                  <h4 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'} mb-2`}>No Assets Yet</h4>
+                  <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mb-4`}>Start by tokenizing your first real-world asset</p>
+                  <Button 
+                    onClick={() => setShowNFTDialog(true)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Tokenize Asset
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <h4 className={`text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'} mb-4`}>Your Created Tokens</h4>
+                  {createdTokens.map((token, index) => (
+                    <div key={index} className={`p-4 rounded-lg border ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <h5 className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{token.name}</h5>
+                          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-1`}>
+                            Token Address: <span className="font-mono text-xs">{token.tokenId}</span>
+                          </p>
+                          <div className="flex items-center space-x-4 mt-2 text-sm">
+                            <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                              Supply: {token.amount}
+                            </span>
+                            <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                              Price: {token.price} HBAR
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => copyToClipboard(token.tokenId)}
+                            className={`${isDarkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                          >
+                            <Copy className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(`https://hashscan.io/testnet/token/${token.tokenId}`, '_blank')}
+                            className={`${isDarkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <Button 
+                    onClick={() => setShowNFTDialog(true)}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg transition-colors"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Another Asset
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -868,6 +856,22 @@ const Issuer: React.FC = () => {
                         <option key={token} value={token}>{token}</option>
                       ))}
                     </select>
+                  </LabelInputContainer>
+                  <LabelInputContainer>
+                    <Label htmlFor="nftPricePerToken" className={`${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Price per Token (HBAR)</Label>
+                    <Input 
+                      id="nftPricePerToken" 
+                      value={nftPricePerToken} 
+                      onChange={e => setNftPricePerToken(e.target.value)} 
+                      placeholder="1.0" 
+                      type="number" 
+                      step="0.001"
+                      min="0"
+                      className={`${isDarkMode ? 'border-gray-600 bg-gray-800 text-white placeholder:text-gray-400' : 'border-gray-300 bg-white text-gray-900 placeholder:text-gray-500'}`} 
+                    />
+                    <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Price per token in HBAR (will be used for marketplace listing)
+                    </p>
                   </LabelInputContainer>
                   <LabelInputContainer>
                     <Label htmlFor="nftEarnXP">Token Rewards</Label>
@@ -1027,6 +1031,10 @@ const Issuer: React.FC = () => {
                         <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>{nftAmount || '0'} NFTs</span>
                       </div>
                       <div className="flex justify-between">
+                        <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Price per Token:</span>
+                        <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>{nftPricePerToken} HBAR</span>
+                      </div>
+                      <div className="flex justify-between">
                         <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Images:</span>
                         <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>{nftImageFiles.length} file(s)</span>
                       </div>
@@ -1043,7 +1051,7 @@ const Issuer: React.FC = () => {
                 <Button 
   type="button" 
   onClick={() => {
-    if (!nftTitle || !nftDescription || nftImageFiles.length === 0) {
+    if (!nftTitle || !nftDescription || nftImageFiles.length === 0 || !nftPricePerToken) {
       toast.error('Please fill all required fields and upload documentation');
       return;
     }
@@ -1065,6 +1073,10 @@ const Issuer: React.FC = () => {
         toast.error('Please enter a valid token supply');
         return;
       }
+      if (!nftPricePerToken || parseFloat(nftPricePerToken) <= 0) {
+        toast.error('Please enter a valid price per token');
+        return;
+      }
       handleMintNFT();
     }}
     disabled={isMinting}
@@ -1083,37 +1095,6 @@ const Issuer: React.FC = () => {
           </DialogContent>
         </Dialog>
 
-        {/* List Asset Dialog */}
-      <Dialog open={showListDialog} onOpenChange={setShowListDialog}>
-          <DialogContent className={`sm:max-w-lg rounded-xl border ${isDarkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'} shadow-xl p-6 md:p-8`}>
-            <DialogHeader>
-              <DialogTitle className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'} mb-2`}>List Asset on Marketplace</DialogTitle>
-              <DialogDescription className={`text-base ${isDarkMode ? 'text-gray-300' : 'text-gray-600'} mb-4`}>Configure your asset listing for the global marketplace.</DialogDescription>
-            </DialogHeader>
-            <form className="my-6 space-y-5" onSubmit={handleListAsset}>
-              <LabelInputContainer>
-                <Label htmlFor="listTokenId" className={`${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Token ID</Label>
-                <Input id="listTokenId" value={listTokenId} onChange={e => setListTokenId(e.target.value)} placeholder="Enter token ID to list" type="number" className={`${isDarkMode ? 'border-gray-600 bg-gray-800 text-white placeholder:text-gray-400' : 'border-gray-300 bg-white text-gray-900 placeholder:text-gray-500'}`} />
-              </LabelInputContainer>
-              <LabelInputContainer>
-                <Label htmlFor="listAmount" className={`${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Quantity to List</Label>
-                <Input id="listAmount" value={listAmount} onChange={e => setListAmount(e.target.value)} placeholder="Number of tokens to list" type="number" className={`${isDarkMode ? 'border-gray-600 bg-gray-800 text-white placeholder:text-gray-400' : 'border-gray-300 bg-white text-gray-900 placeholder:text-gray-500'}`} />
-              </LabelInputContainer>
-              <LabelInputContainer>
-                <Label htmlFor="listPrice" className={`${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Price per Token</Label>
-                <Input id="listPrice" value={listPrice} onChange={e => setListPrice(e.target.value)} placeholder="Price in USD" type="number" className={`${isDarkMode ? 'border-gray-600 bg-gray-800 text-white placeholder:text-gray-400' : 'border-gray-300 bg-white text-gray-900 placeholder:text-gray-500'}`} />
-              </LabelInputContainer>
-              
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setShowListDialog(false)} className={`${isDarkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>Cancel</Button>
-                <Button type="submit" disabled={isListingAsset} className="bg-green-600 text-white hover:bg-green-700">
-                  {isListingAsset ? 'Listing Asset...' : 'List on Marketplace'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-
         {/* Success Dialog for Minting NFT */}
       <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
           <DialogContent className={`sm:max-w-md rounded-xl border ${isDarkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'} shadow-xl p-6`}>
@@ -1127,9 +1108,9 @@ const Issuer: React.FC = () => {
               <div className={`flex items-center justify-between p-4 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'} rounded-lg border ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
                 <div className="flex flex-col">
                   <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Asset Token ID</span>
-                  <span className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'} break-all`}>{mintedAssetId}</span>
+                  <span className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'} break-all`}>{mintedAssetId || 'Loading...'}</span>
                 </div>
-                <Button variant="outline" size="icon" onClick={() => copyToClipboard(mintedAssetId)} className={`${isDarkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-500 hover:bg-gray-50'}`}>
+                <Button variant="outline" size="icon" onClick={() => copyToClipboard(mintedAssetId || '')} className={`${isDarkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-500 hover:bg-gray-50'}`}>
                   <Copy className="h-5 w-5" />
                 </Button>
               </div>

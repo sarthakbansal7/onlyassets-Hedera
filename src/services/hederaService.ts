@@ -12,6 +12,18 @@ import {
 } from "@hashgraph/sdk";
 import { ethers } from "ethers";
 
+// Helper function to convert string to Uint8Array for browser compatibility
+function stringToUint8Array(str: string): Uint8Array {
+  const encoder = new TextEncoder();
+  return encoder.encode(str);
+}
+
+// Helper function to convert Uint8Array to string for browser compatibility
+function uint8ArrayToString(uint8Array: Uint8Array): string {
+  const decoder = new TextDecoder();
+  return decoder.decode(uint8Array);
+}
+
 export interface TokenCreationData {
   name: string;
   description: string;
@@ -149,14 +161,14 @@ I authorize this token creation on Hedera.`;
         .setMaxSupply(tokenData.amount)
         .setSupplyKey(operatorKey)
         .setTreasuryAccountId(operatorId)
-        .setMetadata(Buffer.from(JSON.stringify({
+        .setTokenMemo(JSON.stringify({
           metadataURI: tokenData.metadataURI,
           price: tokenData.price,
           amount: tokenData.amount,
           assetType: tokenData.assetType,
           issuer: issuerAddress,
           createdAt: Date.now()
-        })))
+        }))
         .setMaxTransactionFee(new Hbar(2))
         .execute(this.client);
 
@@ -171,7 +183,7 @@ I authorize this token creation on Hedera.`;
       for (let i = 0; i < tokenData.amount; i++) {
         const mintTx = await new TokenMintTransaction()
           .setTokenId(tokenId)
-          .setMetadata([Buffer.from(tokenData.metadataURI)])
+          .setMetadata([stringToUint8Array(tokenData.metadataURI)])
           .setMaxTransactionFee(new Hbar(2))
           .execute(this.client);
 
@@ -241,9 +253,26 @@ I authorize this token creation on Hedera.`;
       const data = await response.json();
 
       if (serialNumber && data.metadata) {
-        // Parse NFT metadata
-        const metadata = JSON.parse(Buffer.from(data.metadata, 'base64').toString());
-        return metadata;
+        // Parse NFT metadata - handle base64 encoded metadata
+        try {
+          // Try to decode base64 if it's encoded, otherwise use as string
+          let metadataString = data.metadata;
+          if (typeof data.metadata === 'string') {
+            try {
+              // Try to decode from base64
+              const decoded = atob(data.metadata);
+              metadataString = decoded;
+            } catch {
+              // If base64 decode fails, use as is
+              metadataString = data.metadata;
+            }
+          }
+          const metadata = JSON.parse(metadataString);
+          return metadata;
+        } catch (error) {
+          console.error('Error parsing NFT metadata:', error);
+          return data.metadata;
+        }
       }
 
       return data;
