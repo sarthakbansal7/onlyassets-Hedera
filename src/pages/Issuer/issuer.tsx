@@ -377,15 +377,14 @@ const Issuer: React.FC = () => {
         const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0'); // 3-digit random
         const uniqueTokenId = `${timestamp}${random}`; // Creates unique 9-digit ID
         
-        // Convert HBAR price to Wei (1 HBAR = 10^18 Wei) using ethers for precision
-        const { ethers } = await import('ethers');
-        const priceInWei = ethers.utils.parseEther(nftPricePerToken.toString());
+        // Convert HBAR price to tinybars (1 HBAR = 10^8 tinybars)
+        const priceInTinybars = Math.floor(parseFloat(nftPricePerToken) * 100000000); // 10^8
         
         // Call listAsset with issuer's signer (this will trigger MetaMask)
         await marketplaceService.listAsset(
           uniqueTokenId,           // _tokenId: string
           parseInt(nftAmount),     // _amount: uint256  
-          Number(priceInWei.toString()), // _price: number (in Wei) - convert BigNumber to number
+          priceInTinybars,         // _price: number (in tinybars) - HBAR's smallest unit
           metadataUri             // _metadataURI: string (comprehensive metadata)
         );
         
