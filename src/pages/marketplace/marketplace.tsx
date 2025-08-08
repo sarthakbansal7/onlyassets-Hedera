@@ -12,6 +12,7 @@ import { BackgroundBeamsWithCollision } from '@/components/ui/background-beams-w
 import BuyModal from '@/components/BuyModal';
 import MarketplaceService from '@/services/marketplaceService';
 import { ethers } from 'ethers';
+import { fetchHBARPrice, formatPriceInUSD, convertHBARToUSD } from '@/utils/priceService';
 
 interface MarketplaceListing {
   tokenId: string;
@@ -35,11 +36,28 @@ const Marketplace: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [selectedListing, setSelectedListing] = useState<MarketplaceListing | null>(null);
   const [showDetails, setShowDetails] = useState<MarketplaceListing | null>(null);
+  const [hbarPrice, setHbarPrice] = useState<number>(0.05); // Default fallback price
+  const [priceLoading, setPriceLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
+    loadHBARPrice();
     loadMarketplaceListings();
   }, []);
+
+  const loadHBARPrice = async () => {
+    setPriceLoading(true);
+    try {
+      const price = await fetchHBARPrice();
+      setHbarPrice(price);
+      console.log(`HBAR price loaded: $${price}`);
+    } catch (error) {
+      console.error('Failed to fetch HBAR price:', error);
+      toast.error('Failed to fetch HBAR price, using fallback');
+    } finally {
+      setPriceLoading(false);
+    }
+  };
 
   const loadMarketplaceListings = async () => {
     setLoading(true);
@@ -195,10 +213,15 @@ const Marketplace: React.FC = () => {
                 <span className="text-gray-600 hover:text-gray-900 cursor-pointer transition-colors">About</span>
                 <span className="text-gray-600 hover:text-gray-900 cursor-pointer transition-colors">Help</span>
               </div>
-              <div className="flex items-center space-x-2 px-4 py-2 bg-green-100 rounded-xl">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span className="text-sm font-medium text-green-700">Live Marketplace</span>
-              </div>
+              <button 
+                onClick={() => navigate('/dashboard')}
+                className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl transition-all duration-300 shadow-md hover:shadow-lg"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span className="font-medium">My Dashboard</span>
+              </button>
             </div>
           </div>
         </div>
@@ -210,6 +233,7 @@ const Marketplace: React.FC = () => {
           listings={listings.slice(0, 3)} 
           onSelectListing={setSelectedListing}
           onViewDetails={setShowDetails}
+          hbarPrice={hbarPrice}
         />
         
         {/* See All Listings Section */}
@@ -261,6 +285,7 @@ const Marketplace: React.FC = () => {
               listings={realEstateListings} 
               category="Real Estate" 
               onSelectListing={setSelectedListing}
+              hbarPrice={hbarPrice}
             />
           </TabsContent>
           <TabsContent value="invoices">
@@ -268,6 +293,7 @@ const Marketplace: React.FC = () => {
               listings={invoiceListings} 
               category="Invoices"
               onSelectListing={setSelectedListing}
+              hbarPrice={hbarPrice}
             />
           </TabsContent>
           <TabsContent value="commodities">
@@ -275,6 +301,7 @@ const Marketplace: React.FC = () => {
               listings={commodityListings} 
               category="Commodities"
               onSelectListing={setSelectedListing}
+              hbarPrice={hbarPrice}
             />
           </TabsContent>
           <TabsContent value="stocks">
@@ -282,6 +309,7 @@ const Marketplace: React.FC = () => {
               listings={stockListings} 
               category="Stocks"
               onSelectListing={setSelectedListing}
+              hbarPrice={hbarPrice}
             />
           </TabsContent>
           <TabsContent value="carbonCredits">
@@ -289,6 +317,7 @@ const Marketplace: React.FC = () => {
               listings={carbonCreditListings} 
               category="Carbon Credits"
               onSelectListing={setSelectedListing}
+              hbarPrice={hbarPrice}
             />
           </TabsContent>
         </Tabs>
@@ -309,6 +338,7 @@ const Marketplace: React.FC = () => {
           }}
           onClose={() => setSelectedListing(null)}
           onSuccess={handlePurchaseSuccess}
+          hbarPrice={hbarPrice}
         />
       )}
 
@@ -321,6 +351,7 @@ const Marketplace: React.FC = () => {
             setShowDetails(null);
             setSelectedListing(listing);
           }}
+          hbarPrice={hbarPrice}
         />
       )}
     </div>
@@ -332,7 +363,8 @@ const FeaturedPropertiesCarousel: React.FC<{
   listings: MarketplaceListing[];
   onSelectListing: (listing: MarketplaceListing) => void;
   onViewDetails: (listing: MarketplaceListing) => void;
-}> = ({ listings, onSelectListing, onViewDetails }) => {
+  hbarPrice: number;
+}> = ({ listings, onSelectListing, onViewDetails, hbarPrice }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
@@ -402,10 +434,10 @@ const FeaturedPropertiesCarousel: React.FC<{
               <div className="flex items-center justify-between mb-8">
                 <div>
                   <div className="text-3xl font-bold text-white mb-1">
-                    {(parseFloat(listings[currentIndex].price) / Math.pow(10, 18)).toFixed(4)} HBAR
+                    {formatPriceInUSD(parseFloat(listings[currentIndex].price) / Math.pow(10, 8), hbarPrice)}
                   </div>
                   <div className="text-gray-200 text-sm">
-                    Price per token
+                    Price per token ({(parseFloat(listings[currentIndex].price) / Math.pow(10, 8)).toFixed(4)} HBAR)
                   </div>
                 </div>
                 <div className="text-right">
@@ -490,7 +522,8 @@ const ProfessionalListingsGrid: React.FC<{
   listings: MarketplaceListing[];
   category: string;
   onSelectListing: (listing: MarketplaceListing) => void;
-}> = ({ listings, category, onSelectListing }) => {
+  hbarPrice: number;
+}> = ({ listings, category, onSelectListing, hbarPrice }) => {
   const [activeListing, setActiveListing] = useState<MarketplaceListing | null>(null);
 
   if (listings.length === 0) {
@@ -515,6 +548,7 @@ const ProfessionalListingsGrid: React.FC<{
             listing={activeListing} 
             onClose={() => setActiveListing(null)}
             onBuy={(listing) => onSelectListing(listing)}
+            hbarPrice={hbarPrice}
           />
         )}
       </AnimatePresence>
@@ -559,9 +593,9 @@ const ProfessionalListingsGrid: React.FC<{
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-2xl font-bold bg-gradient-to-r from-gray-800 to-black bg-clip-text text-transparent">
-                    {(parseFloat(listing.price) / Math.pow(10, 18)).toFixed(4)} HBAR
+                    {formatPriceInUSD(parseFloat(listing.price) / Math.pow(10, 8), hbarPrice)}
                   </p>
-                  <p className="text-xs text-gray-500">Price per token</p>
+                  <p className="text-xs text-gray-500">Price per token ({(parseFloat(listing.price) / Math.pow(10, 8)).toFixed(4)} HBAR)</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-medium text-green-600">{listing.amount} Available</p>
@@ -597,7 +631,8 @@ const ProfessionalExpandedDetail: React.FC<{
   listing: MarketplaceListing;
   onClose: () => void;
   onBuy: (listing: MarketplaceListing) => void;
-}> = ({ listing, onClose, onBuy }) => (
+  hbarPrice: number;
+}> = ({ listing, onClose, onBuy, hbarPrice }) => (
   <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
@@ -635,7 +670,7 @@ const ProfessionalExpandedDetail: React.FC<{
             <div className="mb-6">
               <div className="flex items-baseline space-x-4 mb-2">
                 <span className="text-4xl font-bold bg-gradient-to-r from-gray-800 to-black bg-clip-text text-transparent">
-                  {(parseFloat(listing.price) / Math.pow(10, 18)).toFixed(4)} HBAR
+                  {formatPriceInUSD(parseFloat(listing.price) / Math.pow(10, 8), hbarPrice)}
                 </span>
                 <span className="text-lg text-gray-500">Price per token</span>
               </div>
@@ -644,6 +679,8 @@ const ProfessionalExpandedDetail: React.FC<{
                   <div className="w-2 h-2 bg-green-400 rounded-full"></div>
                   <span>Available Now</span>
                 </div>
+                <span>•</span>
+                <span>{(parseFloat(listing.price) / Math.pow(10, 8)).toFixed(4)} HBAR per token</span>
                 <span>•</span>
                 <span>Seller: {listing.seller.slice(0, 6)}...{listing.seller.slice(-4)}</span>
               </div>
