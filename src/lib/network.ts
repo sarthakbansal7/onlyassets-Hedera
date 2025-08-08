@@ -1,1 +1,1 @@
-export const backendDomain = "http://localhost:5000";
+export const backendDomain = "https://onlyassets-server.vercel.app";
