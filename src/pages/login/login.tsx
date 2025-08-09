@@ -199,7 +199,7 @@ const Login: React.FC = () => {
           setSuccess('Registration successful! Redirecting...');
           // Navigate based on the registered role (should be 'user' for public registration)
           const userRole = response.data.user?.primaryRole || response.data.user?.roles?.[0] || 'user';
-          let dashboardRoute = '/dashboard'; // default for users
+          let dashboardRoute = '/marketplace'; // default for users
           
           switch (userRole) {
             case 'admin':
@@ -212,7 +212,7 @@ const Login: React.FC = () => {
               dashboardRoute = '/manager';
               break;
             default:
-              dashboardRoute = '/dashboard';
+              dashboardRoute = '/marketplace';
           }
           
           setTimeout(() => {

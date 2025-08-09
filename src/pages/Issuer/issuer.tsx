@@ -8,7 +8,7 @@ import { LabelInputContainer } from '@/components/ui/form-utils';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { Copy, Home, TrendingUp, Building2, Plus, FileText, BarChart3, Shield, Users, Globe, Sun, Moon, Loader2, Wallet, RefreshCw, ExternalLink } from 'lucide-react';
-import { uploadFileToIPFS, uploadJSONToIPFS } from '@/utils/ipfs';
+import { uploadImageToIPFS, uploadJSONToIPFS } from '@/utils/ipfs';
 import { useWallet } from '@/context/WalletContext';
 import { getAllIssuers, getAllManagers, isIssuer } from '@/services/contractService';
 
@@ -219,27 +219,21 @@ const Issuer: React.FC = () => {
       const imageUrls = [];
       if (nftImageFiles.length > 0) {
         for (const file of nftImageFiles) {
-          const imageMetadata = {
-            name: `${nftTitle} - Image`,
-            description: `Image for ${nftTitle}`,
-            attributes: [
-              {
-                trait_type: "Asset Type",
-                value: assetTypes[nftAssetType]
-              }
-            ]
-          };
-          const imageUrl = await uploadFileToIPFS(file, imageMetadata);
+          console.log('Uploading image file to IPFS:', file.name);
+          const imageUrl = await uploadImageToIPFS(file);
+          console.log('Image uploaded successfully:', imageUrl);
           imageUrls.push(imageUrl);
         }
       }
+      console.log('All images uploaded to IPFS:', imageUrls);
 
       // Step 2: Create comprehensive metadata object with all form data
       toast('Creating comprehensive metadata...');
       const comprehensiveMetadata: any = {
         name: nftTitle,
         description: nftDescription,
-        images: imageUrls,
+        image: imageUrls.length > 0 ? imageUrls[0] : '', // First image for compatibility
+        images: imageUrls, // All images array
         assetType: assetTypes[nftAssetType],
         baseCurrency: nftPriceToken,
         pricePerTokenHBAR: parseFloat(nftPricePerToken),

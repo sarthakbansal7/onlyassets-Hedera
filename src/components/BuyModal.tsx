@@ -53,7 +53,7 @@ const BuyModal: React.FC<BuyModalProps> = ({ asset, onClose, onSuccess, hbarPric
       const signer = provider.getSigner();
 
       // Contract address and simple ABI
-      const contractAddress = "0x262111cfF6a9Fb77Ab3221497b5a681922Ec8279";
+      const contractAddress = "0x1A88e748E74fc90D437b23595D7E176b25289673";
       const abi = [
         "function buyAsset(string _tokenId, uint256 _amount) external payable",
         "function getListing(string _tokenId) external view returns (address seller, uint256 amount, uint256 price, string metadataURI, bool active)"
@@ -138,7 +138,7 @@ const BuyModal: React.FC<BuyModalProps> = ({ asset, onClose, onSuccess, hbarPric
               
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div className="bg-blue-50 rounded-xl p-4 border border-blue-200/50">
-                  <div className="text-blue-600 text-sm font-medium">Token ID</div>
+                  <div className="text-blue-600 text-sm font-medium">Platform ID</div>
                   <div className="text-blue-900 font-semibold mt-1">#{asset.tokenId}</div>
                 </div>
                 <div className="bg-green-50 rounded-xl p-4 border border-green-200/50">

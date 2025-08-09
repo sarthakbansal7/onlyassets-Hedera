@@ -78,11 +78,30 @@ const Marketplace: React.FC = () => {
         
         if (!metadata) continue; // Skip if no metadata
         
+        // Extract image URL with proper IPFS handling
+        let imageUrl = 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&h=600&fit=crop'; // fallback
+        
+        // Check for image in metadata - try different fields
+        const candidateImage = metadata.image || 
+                              (metadata.images && metadata.images[0]) || 
+                              metadata.imageUrl;
+                              
+        if (candidateImage) {
+          if (candidateImage.startsWith('ipfs://')) {
+            // Convert IPFS URI to HTTP gateway
+            const hash = candidateImage.replace('ipfs://', '');
+            imageUrl = `https://gateway.pinata.cloud/ipfs/${hash}`;
+            console.log(`Converting IPFS URI for token ${result.tokenIds[i]}:`, candidateImage, '→', imageUrl);
+          } else if (candidateImage.startsWith('http')) {
+            imageUrl = candidateImage;
+          }
+        }
+        
         const listing: MarketplaceListing = {
           tokenId: result.tokenIds[i],
           name: metadata.name || `Asset ${result.tokenIds[i]}`,
           description: metadata.description || 'No description available',
-          image: metadata.image || metadata.imageUrl || result.metadataURIs[i] || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&h=600&fit=crop',
+          image: imageUrl,
           price: result.prices[i], // Price is already a string in Wei
           amount: result.amounts[i],
           seller: result.sellers[i],
@@ -696,7 +715,7 @@ const ProfessionalExpandedDetail: React.FC<{
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Token ID - Always show first */}
                 <div className="bg-blue-50 rounded-xl p-4 border border-blue-200/50">
-                  <div className="text-blue-600 text-sm font-medium">Token ID</div>
+                  <div className="text-blue-600 text-sm font-medium">Platform ID</div>
                   <div className="text-blue-900 font-semibold mt-1">#{listing.tokenId}</div>
                 </div>
                 {/* Available Amount */}

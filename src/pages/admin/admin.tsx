@@ -645,6 +645,13 @@ const Admin: React.FC = () => {
               </Button>
               
               <Button asChild variant="ghost" size="sm" className={`${isDarkMode ? 'text-slate-400 hover:text-white hover:bg-slate-700' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}>
+                <Link to="/marketplace" className="flex items-center space-x-2 px-3 py-1.5">
+                  <TrendingUp className="w-4 h-4" />
+                  <span className="text-sm">Marketplace</span>
+                </Link>
+              </Button>
+              
+              <Button asChild variant="ghost" size="sm" className={`${isDarkMode ? 'text-slate-400 hover:text-white hover:bg-slate-700' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}>
                 <Link to="/" className="flex items-center space-x-2 px-3 py-1.5">
                   <Home className="w-4 h-4" />
                   <span className="text-sm">Home</span>

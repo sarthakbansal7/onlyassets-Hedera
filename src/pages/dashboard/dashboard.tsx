@@ -255,7 +255,7 @@ const Dashboard: React.FC = () => {
       const readOnlyProvider = new ethers.providers.JsonRpcProvider('https://testnet.hashio.io/api');
       
       // Contract address and ABIs
-      const contractAddress = "0x262111cfF6a9Fb77Ab3221497b5a681922Ec8279";
+      const contractAddress = "0x1A88e748E74fc90D437b23595D7E176b25289673";
       const getAllListingsAbi = [
         "function getAllListings() external view returns (string[] memory tokenIds, address[] memory sellers, uint256[] memory amounts, uint256[] memory prices, string[] memory metadataURIs)"
       ];
@@ -490,7 +490,7 @@ const Dashboard: React.FC = () => {
       const signer = provider.getSigner();
       
       // Contract address and ABI
-      const contractAddress = "0x262111cfF6a9Fb77Ab3221497b5a681922Ec8279";
+      const contractAddress = "0x1A88e748E74fc90D437b23595D7E176b25289673";
       const sellAssetAbi = [
         "function sellAsset(string memory _tokenId, uint256 _amount) external"
       ];
@@ -1471,33 +1471,6 @@ const Dashboard: React.FC = () => {
             ))}
           </div>
         </nav>
-
-        {/* User Profile Section */}
-        {!sidebarCollapsed && (
-          <div className="absolute bottom-20 left-4 right-4">
-            <div className={`p-4 rounded-xl border ${
-              darkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'
-            }`}>
-              <div className="flex items-center space-x-3">
-                <Avatar className="w-10 h-10">
-                  <AvatarFallback className={`font-medium ${
-                    darkMode ? 'bg-gray-100 text-gray-900' : 'bg-gray-900 text-white'
-                  }`}>
-                    JI
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className={`font-medium text-sm truncate ${
-                    darkMode ? 'text-white' : 'text-gray-900'
-                  }`}>John Investor</p>
-                  <p className={`text-xs truncate ${
-                    darkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Premium Member</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Collapse Button - Desktop Only */}
         <div className="absolute bottom-4 left-4 right-4 hidden lg:block">

@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
 
-const MARKETPLACE_ADDRESS = '0x262111cfF6a9Fb77Ab3221497b5a681922Ec8279';
+const MARKETPLACE_ADDRESS = '0x1A88e748E74fc90D437b23595D7E176b25289673';
 const MARKETPLACE_ACCOUNT_ID = '0.0.6530062';
 const HEDERA_TESTNET_RPC = 'https://testnet.hashio.io/api';
 

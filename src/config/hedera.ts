@@ -3,21 +3,21 @@ export const HEDERA_CONFIG = {
   // Network configuration
   NETWORK: (import.meta.env.VITE_HEDERA_NETWORK || 'testnet') as 'testnet' | 'mainnet',
   
-  // Platform operator account (set these in environment variables in production)
-  OPERATOR_ID: import.meta.env.VITE_HEDERA_ACCOUNT_ID || '0.0.123456',
-  OPERATOR_KEY: import.meta.env.VITE_HEDERA_PRIVATE_KEY || '', // Keep private!
+  // Platform operator account
+  OPERATOR_ID: '0.0.6498605',
+  OPERATOR_KEY: '0x7ea592ad2bf4db5e006b39dfc60f3ab9f17f6b548fba1fc5d89d4a38f8211acd', // Keep private!
   
   // Marketplace account (where tokens are transferred for listing)
   MARKETPLACE_ACCOUNT_ID: import.meta.env.VITE_HEDERA_MARKETPLACE_ACCOUNT || '0.0.123457',
   
   // Admin contract address (deployed on Hedera)
-  ADMIN_CONTRACT_ADDRESS: import.meta.env.VITE_ADMIN_CONTRACT_ADDRESS || '',
+  ADMIN_CONTRACT_ADDRESS: '0xC57D9378F54A2cA9ED87822E9922c79F684B2a2c',
   
   // Marketplace contract address (deployed on Hedera)
-  MARKETPLACE_CONTRACT_ADDRESS: import.meta.env.VITE_MARKETPLACE_CONTRACT_ADDRESS || '',
+  MARKETPLACE_CONTRACT_ADDRESS: '0x1A88e748E74fc90D437b23595D7E176b25289673',
   
   // PaymentSplitter contract address (deployed on Hedera)
-  PAYMENT_SPLITTER_CONTRACT_ADDRESS: import.meta.env.VITE_PAYMENT_SPLITTER_CONTRACT_ADDRESS || '',
+  PAYMENT_SPLITTER_CONTRACT_ADDRESS: '0x9cA1cC1eF3E18C741b5117eA51481E9bb66aeee1',
   
   // Mirror Node URLs
   MIRROR_NODE_URL: {
@@ -39,8 +39,8 @@ export const HEDERA_CONFIG = {
 // RPC URLs for Ethereum/Polygon (for smart contract interactions)
 export const RPC_CONFIG = {
   // You can use Hedera EVM or a separate EVM chain for contracts
-  HEDERA_EVM_TESTNET: import.meta.env.VITE_HEDERA_TESTNET_RPC || 'https://testnet.hashio.io/api',
-  HEDERA_EVM_MAINNET: import.meta.env.VITE_HEDERA_MAINNET_RPC || 'https://mainnet.hashio.io/api',
+  HEDERA_EVM_TESTNET: 'https://testnet.hashio.io/api',
+  HEDERA_EVM_MAINNET: 'https://mainnet.hashio.io/api',
   
   // Alternative: Use Polygon for contracts
   POLYGON_TESTNET: 'https://rpc-mumbai.maticvigil.com',

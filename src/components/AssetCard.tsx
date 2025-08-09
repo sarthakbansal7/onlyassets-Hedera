@@ -33,6 +33,13 @@ const AssetCard: React.FC<AssetProps> = ({ asset, onBuyClick }) => {
           src={asset.image}
           alt={asset.title}
           className="h-full w-full object-cover transition-transform"
+          onLoad={() => console.log('✅ Image loaded successfully:', asset.image)}
+          onError={(e) => {
+            console.log('❌ Image failed to load:', asset.image);
+            console.log('Error event:', e);
+            // Set fallback image
+            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&h=600&fit=crop';
+          }}
         />
         <Badge className={`absolute top-3 right-3 ${colorClass}`}>
           {asset.category}

@@ -141,6 +141,45 @@ export const uploadFileToIPFS = async (
   }
 };
 
+export const uploadImageToIPFS = async (file: File): Promise<string> => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    // Add simple pinata metadata for the image file
+    const pinataMetadata = JSON.stringify({
+      name: file.name,
+      keyvalues: {
+        type: 'image',
+        fileName: file.name
+      }
+    });
+    formData.append('pinataMetadata', pinataMetadata);
+
+    // Upload image file directly to IPFS
+    const response = await axios({
+      method: 'post',
+      url: 'https://api.pinata.cloud/pinning/pinFileToIPFS',
+      data: formData,
+      maxBodyLength: Infinity,
+      headers: {
+        'pinata_api_key': PINATA_API_KEY,
+        'pinata_secret_api_key': PINATA_API_SECRET,
+      },
+    });
+
+    // Return the direct IPFS URI for the image
+    return `ipfs://${response.data.IpfsHash}`;
+  } catch (error) {
+    console.error('Error uploading image to IPFS:', error);
+    if (axios.isAxiosError(error)) {
+      console.error('Response:', error.response?.data);
+      throw new Error(`Image upload failed: ${error.response?.data?.message || error.message}`);
+    }
+    throw error;
+  }
+};
+
 export const getIpfsUrl = (hash: string): string => {
   return `https://gateway.pinata.cloud/ipfs/${hash}`;
 };

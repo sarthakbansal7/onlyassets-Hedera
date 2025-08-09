@@ -257,7 +257,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (roles.includes('admin')) return '/admin';
     if (roles.includes('issuer')) return '/issuer';
     if (roles.includes('manager')) return '/manager';
-    return '/dashboard';
+    return '/marketplace';
   };
 
   const contextValue: AuthContextType = {
